@@ -49,4 +49,4 @@ title0 = M5Title(title="m5RGB", x=3 , fgcolor=0xFFFFFF, bgcolor=0x0000FF)
 I, Tommy Ho, has been coding in some form or other since college, before the web existed and has continued to develop scripts, with a particular passion for Python, R, and Ardunio for over a decade. I have recently expanded my work on automation to microcontroller and robotic projects.
 
 ## Suggestions and Feedback
-[Click here]{(mailto://tommyho510@gmail.com) if you have any feedback or suggestions.
+[Click here](mailto://tommyho510@gmail.com) if you have any feedback or suggestions.
