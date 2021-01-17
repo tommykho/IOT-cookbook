@@ -12,6 +12,7 @@ This is the code repository for Microcontrollers/IOT cut-and-paste scripts
 * M5Stack M5StickC w/ TFT (esp32)
 * M5Stack ATOM Matrix (esp32)
 * TTGO T-Camera w/ OLED (esp32)
+* TTGO T-Display w/ TFT (esp32)
 * TTGO T-Journal w/ OLED (esp32)
 * Ai-Thinker esp32-cam (esp32)
 * Ai-Thinker esp-32S (esp32)
@@ -40,6 +41,22 @@ import unit
 M5Led.on()
 rgb0 = unit.get(unit.RGB, unit.PORTA)
 title0 = M5Title(title="m5RGB", x=3 , fgcolor=0xFFFFFF, bgcolor=0x0000FF)
+...
+```
+
+```
+#include <SPIFFS.h>
+#include <Arduino_GFX_Library.h>  /* Install via Arduino Library Manager */
+#include "gifdec.h"
+
+/* 
+ * espgfxGIF.ino
+ */ 
+ 
+/ *** BEGIN editing of your settings ...
+#define ARDUINO_TDISPLAY
+//#define GIF_FILENAME "/suatmm_240x135.gif" /* comment out for random GIF */
+// *** END editing of your settings ...
 ```
 
 ## Related products
