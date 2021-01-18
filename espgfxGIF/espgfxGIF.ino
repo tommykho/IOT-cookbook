@@ -4,7 +4,7 @@
 
 /*
  *  espgfxGIF Version 2021.01A (Brightness Edition)
- *  Board: TTGO T-Display * M5Stack M5StickC (esp32)
+ *  Board: TTGO T-Display & M5Stack M5StickC (esp32)
  *  Author: tommyho510@gmail.com
  *  Original Author: moononournation
  *  Required: Arduino library Arduino_GFX 1.0.5
