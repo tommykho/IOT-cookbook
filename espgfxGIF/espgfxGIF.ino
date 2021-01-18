@@ -210,6 +210,10 @@ void setup() {
   pinMode(BTN_A, INPUT_PULLUP);
   pinMode(BTN_B, INPUT);
 
+#if defined(ARDUINO_M5STICKC)
+  M5.begin();
+#endif
+
   Serial.begin(115200);
   delay(500);
   Serial.println("{Device:Started,}");
