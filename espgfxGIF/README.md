@@ -1,5 +1,5 @@
 # espgfxGIF
-see https://www.hackster.io/projects/8964df
+https://www.hackster.io/projects/8964df
 Based on Arduino_GFX and gifdec, espgfxGIF is an Arduino sketch that plays animated GIF on TFT screen of some Arduino Dev modules, mainly esp32 and esp8266.
 
 ## Version 2022.05A ***BUG FIXED***
