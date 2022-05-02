@@ -3,11 +3,11 @@
 #include "gifdec.h"
 
 /*
- *  espgfxGIF Version 2021.01A (Brightness Edition)
+ *  espgfxGIF Version 2022.05A (Brightness Edition)
  *  Board: TTGO T-Display & M5Stack M5StickC (esp32)
  *  Author: tommyho510@gmail.com
  *  Original Author: moononournation
- *  Required: Arduino library Arduino_GFX 1.0.5
+ *  Required: Arduino library Arduino_GFX 1.2.0
  *  Dependency: gifdec.h
  *
  *  Please upload SPIFFS data with ESP32 Sketch Data Upload:
@@ -17,7 +17,7 @@
 
 // *** BEGIN editing of your settings ...
 #define ARDUINO_TDISPLAY
-//#define GIF_FILENAME "/suatmm_240x135.gif" /* comment out for random GIF */
+//#define GIF_FILENAME "/suatmm_160x80.gif" /* comment out for random GIF */
 // *** END editing of your settings ...
 
 #if defined(ARDUINO_M5STICKC)
@@ -30,7 +30,7 @@
 //#define TFT_DC   23
 #define TFT_RST  18
 #define TFT_BL 2
-Arduino_ESP32SPI_DMA *bus = new Arduino_ESP32SPI_DMA(23 /* DC */, 5 /* CS */, 13 /* SCK */, 15 /* MOSI */, -1 /* MISO */);
+Arduino_DataBus *bus = new Arduino_ESP32SPI(23 /* DC */, 5 /* CS */, 13 /* SCK */, 15 /* MOSI */, -1 /* MISO */);
 Arduino_ST7735 *gfx = new Arduino_ST7735(bus, TFT_RST /* RST */, 1 /* rotation */, true /* IPS */, 80 /* width */, 160 /* height */, 26 /* col offset 1 */, 1 /* row offset 1 */, 26 /* col offset 2 */, 1 /* row offset 2 */);
 const int BTN_A = 37;
 const int BTN_B = 39;
@@ -42,10 +42,10 @@ const int BTN_B = 39;
 //#define TFT_SCLK 18
 //#define TFT_CS   5
 //#define TFT_DC   16
-#define TFT_RST  23
+#define TFT_RST -1
 #define TFT_BL 4
-Arduino_ESP32SPI_DMA *bus = new Arduino_ESP32SPI_DMA(16 /* DC */, 5 /* CS */, 18 /* SCK */, 19 /* MOSI */, -1 /* MISO */);
-Arduino_ST7789 *gfx = new Arduino_ST7789(bus, TFT_RST /* RST */, 3 /* rotation */, true /* IPS */, 135 /* width */, 240 /* height */, 53 /* col offset 1 */, 40 /* row offset 1 */, 52 /* col offset 2 */, 40 /* row offset 2 */);
+Arduino_DataBus *bus = new Arduino_ESP32SPI(16 /* DC */, 5 /* CS */, 18 /* SCK */, 19 /* MOSI */, -1 /* MISO */);
+Arduino_ST7789 *gfx = new Arduino_ST7789(bus, TFT_RST /* RST */, 1 /* rotation */, true /* IPS */, 135 /* width */, 240 /* height */, 52 /* col offset 1 */, 40 /* row offset 1 */, 53 /* col offset 2 */, 40 /* row offset 2 */);
 const int BTN_A = 0;
 const int BTN_B = 35;
 
@@ -64,7 +64,7 @@ bool inv = 0;
 int pressA = 0;
 int pressB = 0;
 
-String gifArray[30], newGIF_FILENAME, playFile;
+String gifArray[30], randGIF_FILENAME, playFile;
 int gifArraySize;
   
 void adjBrightness() {
@@ -111,10 +111,10 @@ void listSPIFFS() {
       file = root.openNextFile();
       gifArraySize++;
     }
-    newGIF_FILENAME = gifArray[random(0, gifArraySize)];
+    randGIF_FILENAME = gifArray[random(0, gifArraySize)];
     //p = millis();
-    //newGIF_FILENAME = gifArray[millis() % gifArraySize];
-    Serial.println("  {randomGIF:" + String(newGIF_FILENAME) +"}");
+    //randGIF_FILENAME = gifArray[millis() % gifArraySize];
+    Serial.println("  {randomGIF:" + String(randGIF_FILENAME) +"}");
     Serial.println("]}");
   }
 }
@@ -140,15 +140,16 @@ void gfxPlayGIF() {
 
 #ifndef GIF_FILENAME
 #define GIF_FILENAME
-playFile = newGIF_FILENAME;
+playFile = "/" + String(randGIF_FILENAME);
 #else
 playFile = GIF_FILENAME;
 #endif
     
     File vFile = SPIFFS.open(playFile);
     if (!vFile || vFile.isDirectory()) {
-      Serial.println(F("ERROR: Failed to open "GIF_FILENAME" file for reading"));
-      gfx->println(F("ERROR: Failed to open "GIF_FILENAME" file for reading"));
+      Serial.println(F("ERROR: Failed to open file for reading"));
+      gfx->println(F("ERROR: Failed to open file for reading"));
+      gfx->println(playFile);
     } else {
       gd_GIF *gif = gd_open_gif(&vFile);
       if (!gif) {
@@ -159,7 +160,7 @@ playFile = GIF_FILENAME;
         if (!buf) {
           Serial.println(F("buf malloc failed!"));
         } else {
-          Serial.println(F("{acion:play, GIF:started, Media:"GIF_FILENAME", Info:["));
+          Serial.println(F("{acion:play, GIF:started, Info:["));
           Serial.printf("  {canvas size: %ux%u}\n", gif->width, gif->height);
           Serial.printf("  {number of colors: %d}\n", gif->palette->size);
           Serial.println(F("]}"));
@@ -209,14 +210,12 @@ playFile = GIF_FILENAME;
 void setup() {
   pinMode(BTN_A, INPUT_PULLUP);
   pinMode(BTN_B, INPUT);
-
 #if defined(ARDUINO_M5STICKC)
   M5.begin();
 #endif
-
   Serial.begin(115200);
   delay(500);
-  Serial.println("{Device:Started,}");
+  Serial.println("{Device:Started}");
 
   listSPIFFS();
   //eraseSPIFFS();
