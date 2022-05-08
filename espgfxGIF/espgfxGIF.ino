@@ -3,11 +3,11 @@
 #include "gifdec.h"
 
 /*
- *  espgfxGIF Version 2022.05A (Brightness Edition)
+ *  espgfxGIF Version 2022.05B (Brightness Edition)
  *  Board: TTGO T-Display & M5Stack M5StickC (esp32)
  *  Author: tommyho510@gmail.com
  *  Original Author: moononournation
- *  Required: Arduino library Arduino_GFX 1.2.0
+ *  Required: Arduino library Arduino_GFX 1.2.1
  *  Dependency: gifdec.h
  *
  *  Please upload SPIFFS data with ESP32 Sketch Data Upload:
@@ -17,8 +17,10 @@
 
 // *** BEGIN editing of your settings ...
 #define ARDUINO_TDISPLAY
-//#define GIF_FILENAME "/suatmm_160x80.gif" /* comment out for random GIF */
+//#define GIF_FILENAME "/your_file.gif" /* comment out for random GIF */
 // *** END editing of your settings ...
+
+//#define DEBUG /* uncomment this line to start with screen test */
 
 #if defined(ARDUINO_M5STICKC)
 /* M5Stack */
@@ -49,6 +51,36 @@ Arduino_ST7789 *gfx = new Arduino_ST7789(bus, TFT_RST /* RST */, 1 /* rotation *
 const int BTN_A = 0;
 const int BTN_B = 35;
 
+#elif defined(ARDUINO_D1MINI) 
+/* LOLIN D1 Mini esp8266 + TFT-2.4 Shield */
+/* 2.8" ILI9341 TFT LCD 240x320 (Rotation: 0 top up, 1 left, 2 bottom, 3 right) */
+#define TFT_MOSI 13
+#define TFT_MISO 12
+#define TFT_SCLK 14
+#define TFT_CS   16
+#define TFT_DC   15
+#define TFT_RST  5
+//#define TFT_BL NC
+Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC /* DC */, TFT_CS /* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, TFT_MISO /* MISO */);
+Arduino_ILI9341 *gfx = new Arduino_ILI9341(bus, TFT_RST /* RST */, 0 /* rotation */, false /* IPS */);
+const int BTN_A = 3;
+const int BTN_B = 4;
+
+#elif defined(ARDUINO_DEVKITV1) 
+/* DOIT ESP32 DEVKIT V1 + ILI9341 */
+/* 2.8" ILI9341 TFT LCD 240x320 (Rotation: 0 top up, 1 left, 2 bottom, 3 right) */
+#define TFT_MOSI 23
+#define TFT_MISO 19
+#define TFT_SCLK 18
+#define TFT_CS   5
+#define TFT_DC   16
+#define TFT_RST  17
+//#define TFT_BL 4
+Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC /* DC */, TFT_CS /* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, TFT_MISO /* MISO */);
+Arduino_ILI9341 *gfx = new Arduino_ILI9341(bus, TFT_RST /* RST */, 0 /* rotation */, false /* IPS */);
+const int BTN_A = 13;
+const int BTN_B = 15;
+
 #endif /* not selected specific hardware */
 
 // Rotation & Brightness control
@@ -67,38 +99,6 @@ int pressB = 0;
 String gifArray[30], randGIF_FILENAME, playFile;
 int gifArraySize;
   
-void adjBrightness() {
-  if (digitalRead(BTN_B) == 0) {
-    if (pressB == 0) {
-      pressB = 1;
-      b++;
-      //if (b > 15) b = 7;
-      //M5.Axp.ScreenBreath(b);
-      if (b >= 5) b = 0;
-      ledcWrite(pwmLedChannelTFT, backlight[b]);
-      Serial.println("{BTN_B:Pressed, Brightness:" + String(backlight[b]) + "}");
-    }
-  } else pressB = 0;
-}
-
-void adjGIF() {
-  if (digitalRead(BTN_A) == 0) {
-    if (pressA == 0) {
-      pressA = 1;
-      inv = !inv;
-      gfx->invertDisplay(inv);
-      Serial.println("{BTN_A:Pressed, Inverted:" + String(inv) + "}");
-      //a++;
-      //if (a >= 2)
-      //  a = 0;
-      //gfx->setRotation(rot[a]);
-      //Serial.println("{BTN_A:Pressed, Rotation:" + String(rot[a]) + "}");
-      //Serial.println("{BTN_A:Pressed}");
-      listSPIFFS();
-    }
-  } else pressA = 0;
-}
-
 void listSPIFFS() {
   gifArraySize = 0;
   Serial.println("{ls /:[");
@@ -130,6 +130,38 @@ void eraseSPIFFS() {
     }
   }
 }
+
+void adjGIF() {
+  if (digitalRead(BTN_A) == 0) {
+    if (pressA == 0) {
+      pressA = 1;
+      inv = !inv;
+      gfx->invertDisplay(inv);
+      Serial.println("{BTN_A:Pressed, Inverted:" + String(inv) + "}");
+      //a++;
+      //if (a >= 2)
+      //  a = 0;
+      //gfx->setRotation(rot[a]);
+      //Serial.println("{BTN_A:Pressed, Rotation:" + String(rot[a]) + "}");
+      //Serial.println("{BTN_A:Pressed}");
+      listSPIFFS();
+    }
+  } else pressA = 0;
+}
+
+void adjBrightness() {
+  if (digitalRead(BTN_B) == 0) {
+    if (pressB == 0) {
+      pressB = 1;
+      b++;
+      //if (b > 15) b = 7;
+      //M5.Axp.ScreenBreath(b);
+      if (b >= 5) b = 0;
+      ledcWrite(pwmLedChannelTFT, backlight[b]);
+      Serial.println("{BTN_B:Pressed, Brightness:" + String(backlight[b]) + "}");
+    }
+  } else pressB = 0;
+}
     
 void gfxPlayGIF() {
   // Init SPIFFS
@@ -140,9 +172,11 @@ void gfxPlayGIF() {
 
 #ifndef GIF_FILENAME
 #define GIF_FILENAME
-playFile = "/" + String(randGIF_FILENAME);
+    playFile = "/" + String(randGIF_FILENAME);
+	  Serial.println("{Opening random GIF_FILENAME " + playFile + "}");
 #else
-playFile = GIF_FILENAME;
+    playFile = GIF_FILENAME;
+	  Serial.println("{Opening designated GIF_FILENAME " + playFile + "}");
 #endif
     
     File vFile = SPIFFS.open(playFile);
@@ -207,6 +241,115 @@ playFile = GIF_FILENAME;
   }
 }
 
+unsigned long testRainbow(uint8_t cIndex) {
+  gfx->fillScreen(BLACK);
+  unsigned long start = micros();
+  int w = gfx->width(), h = gfx->height(), s = h / 8;
+  uint16_t arr [] = { PINK, RED, ORANGE, YELLOW, GREEN, MAGENTA, BLUE, WHITE, PINK, RED, ORANGE, YELLOW, GREEN, MAGENTA, BLUE, WHITE };
+  gfx->fillRect(0, 0, w, s, arr [cIndex]);
+  gfx->fillRect(0, s, w, 2 * s, arr [cIndex + 1]);
+  gfx->fillRect(0, 2 * s, w, 3 * s, arr [cIndex + 2]);
+  gfx->fillRect(0, 3 * s, w, 4 * s, arr [cIndex + 3]);
+  gfx->fillRect(0, 4 * s, w, 5 * s, arr [cIndex + 4]);
+  gfx->fillRect(0, 5 * s, w, 6 * s, arr [cIndex + 5]);
+  gfx->fillRect(0, 6 * s, w, 7 * s, arr [cIndex + 6]);
+  gfx->fillRect(0, 7 * s, w, 8 * s, arr [cIndex + 7]);
+  return micros() - start;
+}
+
+unsigned long testChar(uint16_t colorT, uint16_t colorB) {
+  gfx->fillScreen(colorB);
+  unsigned long start = micros();
+  gfx->setTextColor(GREEN);
+  for (int x = 0; x < 16; x++){
+    gfx->setCursor(10 + x * 8, 2);
+    gfx->print(x, 16);
+  }
+  gfx->setTextColor(BLUE);
+  for (int y = 0; y < 16; y++){
+    gfx->setCursor(2, 12 + y * 10);
+    gfx->print(y, 16);
+  }
+
+  char c = 0;
+  for (int y = 0; y < 16; y++){
+    for (int x = 0; x < 16; x++){
+      gfx->drawChar(10 + x * 8, 12 + y * 10, c++, colorT, colorB);
+    }
+  }
+  return micros() - start;
+}
+
+unsigned long testFilledCircles(uint8_t radius, uint16_t color) {
+  gfx->fillScreen(BLACK);
+  unsigned long start;
+  int x, y, r2 = radius * 2,
+    w = gfx->width(), h = gfx->height();
+  start = micros();
+  for(x=radius; x<w; x+=r2) {
+    for(y=radius; y<h; y+=r2) {
+      gfx->fillCircle(x, y, radius, color);
+    }
+  }
+  return micros() - start;
+}
+
+unsigned long testCircles(uint8_t radius, uint16_t color) {
+  // gfx->fillScreen(BLACK);
+  // Screen is not cleared for this one -- this is
+  // intentional and does not affect the reported time.
+  unsigned long start;
+  int x, y, r2 = radius * 2,
+    w = gfx->width()  + radius, h = gfx->height() + radius;
+  start = micros();
+  for(x=0; x<w; x+=r2) {
+    for(y=0; y<h; y+=r2) {
+      gfx->drawCircle(x, y, radius, color);
+    }
+  }
+  return micros() - start;
+}
+
+void screen_test() {
+	Serial.print(F("Draw Ranbow: "));
+  Serial.println(testRainbow(0));
+  delay(500);
+  Serial.print(F("Draw Ranbow: "));
+  Serial.println(testRainbow(2));
+  delay(500);
+  Serial.print(F("Draw Ranbow: "));
+  Serial.println(testRainbow(4));
+  delay(500);
+  Serial.print(F("Draw Ranbow: "));
+  Serial.println(testRainbow(6));
+  delay(500);
+  Serial.print(F("Draw Filled Circles: "));
+  Serial.println(testFilledCircles(10, MAGENTA));
+  delay(500);
+  Serial.print(F("Draw Circles: "));
+  Serial.println(testCircles(10, BLACK));
+  delay(500);
+  Serial.print(F("Draw Filled Circles: "));
+  Serial.println(testFilledCircles(10, YELLOW));
+  delay(500);
+  Serial.print(F("Draw Circles: "));
+  Serial.println(testCircles(10, BLUE));
+  delay(500);
+  Serial.print(F("Draw Filled Circles: "));
+  Serial.println(testFilledCircles(10, RED));
+  delay(500);
+  Serial.print(F("Draw Circles: "));
+  Serial.println(testCircles(10, WHITE));
+  delay(500);
+  Serial.print(F("Draw Text: "));
+  Serial.println(testChar(WHITE, BLACK));
+  delay(500);
+  Serial.print(F("Draw Text: "));
+  Serial.println(testChar(BLUE, WHITE));
+  delay(500);
+  gfx->fillScreen(BLACK);
+}
+
 void setup() {
   pinMode(BTN_A, INPUT_PULLUP);
   pinMode(BTN_B, INPUT);
@@ -232,6 +375,10 @@ void setup() {
   ledcWrite(pwmLedChannelTFT, backlight[b]);           // brightness 0 - 255
 #endif
 
+#ifdef DEBUG
+  screen_test();
+#endif
+ 
   gfxPlayGIF();
 
   // Turn off Backlight
