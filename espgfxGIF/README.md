@@ -2,8 +2,10 @@
 https://www.hackster.io/projects/8964df
 Based on Arduino_GFX and gifdec, espgfxGIF is an Arduino sketch that plays animated GIF on TFT screen of some Arduino Dev modules, mainly esp32 and esp8266.
 
-## Version 2022.05A ***BUG FIXED***
-This script works with Arduino_GFX_Library version 1.2.0 (aka GFX library for Arduino, under Library Manager).
+![Video](https://hackster.imgix.net/uploads/attachments/1245416/espgfxgif_Ew48AHPOEB.gif?auto=format%2Ccompress&gifq=35&w=900&h=675&fit=min&fm=mp4)
+
+## Version 2022.05B ***BUG FIXED + Debug Screen Test ***
+This script works with Arduino_GFX_Library version 1.2.0 & 1.2.1 (aka GFX library for Arduino, under Library Manager).
 
 ### Features:
 * Button A - Invert display
@@ -15,11 +17,11 @@ This script works with Arduino_GFX_Library version 1.2.0 (aka GFX library for Ar
 
     M5Stack M5Stick-C (esp32 + ST7735)
     TTGO T-Display (esp32 + ST7789)
-    D1 mini with 2.4 TFT shield (esp8266 + ILI9341)
+    D1 mini with TFT-2.4 shield (esp8266 + ILI9341)
 
 ### Libraries used:
 
-    https://github.com/moononournation/Arduino_GFX version 1.2.0
+    https://github.com/moononournation/Arduino_GFX version 1.2.1
     https://github.com/lecram/gifdec (https://github.com/BasementCat/arduino-tft-gif edition)
 
 ### Backgrounds:
