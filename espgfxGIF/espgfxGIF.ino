@@ -1,13 +1,11 @@
-#include <SPIFFS.h>
 #include <Arduino_GFX_Library.h>  /* Install via Arduino Library Manager */
-#include "gifdec.h"
 
 /*
- *  espgfxGIF Version 2022.05B (Brightness Edition)
- *  Board: TTGO T-Display & M5Stack M5StickC (esp32)
+ *  espgfxGIF Version 2023.08B (Brightness Edition)
+ *  Board: T-Display S3, T-Display, M5StickC-Plus, M5StickC (esp32)
  *  Author: tommyho510@gmail.com
  *  Original Author: moononournation
- *  Required: Arduino library Arduino_GFX 1.2.1
+ *  Required: Arduino library Arduino_GFX 1.3.7
  *  Dependency: gifdec.h
  *
  *  Please upload SPIFFS data with ESP32 Sketch Data Upload:
@@ -16,26 +14,61 @@
  */
 
 // *** BEGIN editing of your settings ...
-#define ARDUINO_TDISPLAY
+#define ARDUINO_M5STICKCPLUS
 //#define GIF_FILENAME "/your_file.gif" /* comment out for random GIF */
 // *** END editing of your settings ...
 
 //#define DEBUG /* uncomment this line to start with screen test */
 
-#if defined(ARDUINO_M5STICKC)
+#if defined(ARDUINO_M5STICKCPLUS)
 /* M5Stack */
-/* 0.96" ST7735 IPS LCD 80x160 M5Stick-C * (Rotation: 0 bottom up, 1 right, 2 top, 3 left) */
-#include <M5StickC.h>
-//#define TFT_MOSI 15
-//#define TFT_SCLK 13
-//#define TFT_CS   5
-//#define TFT_DC   23
+/* 1.14" ST7789 IPS LCD 135x240 M5StickC Plus * (Rotation: 0 bottom up, 1 right, 2 top, 3 left) */
+#define TFT_MOSI 15
+#define TFT_SCLK 13
+#define TFT_CS   5
+#define TFT_DC   23
 #define TFT_RST  18
-#define TFT_BL 2
-Arduino_DataBus *bus = new Arduino_ESP32SPI(23 /* DC */, 5 /* CS */, 13 /* SCK */, 15 /* MOSI */, -1 /* MISO */);
-Arduino_ST7735 *gfx = new Arduino_ST7735(bus, TFT_RST /* RST */, 1 /* rotation */, true /* IPS */, 80 /* width */, 160 /* height */, 26 /* col offset 1 */, 1 /* row offset 1 */, 26 /* col offset 2 */, 1 /* row offset 2 */);
+#define LED      10
+#define TFT_BL   2
+Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC /* DC */, TFT_CS /* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, -1 /* MISO */);
+Arduino_ST7789 *gfx = new Arduino_ST7789(bus, TFT_RST /* RST */, 1 /* rotation */, true /* IPS */, 135 /* width */, 240 /* height */,
+                      53 /* col offset 1 */, 40 /* row offset 1 */, 52 /* col offset 2 */, 40 /* row offset 2 */);
 const int BTN_A = 37;
 const int BTN_B = 39;
+#include <M5StickCPlus.h>
+
+#elif defined(ARDUINO_M5STICKC) 
+/* M5Stack */
+/* 0.96" ST7735 IPS LCD 80x160 M5StickC * (Rotation: 0 bottom up, 1 right, 2 top, 3 left) */
+#define TFT_MOSI 15
+#define TFT_SCLK 13
+#define TFT_CS   5
+#define TFT_DC   23
+#define TFT_RST  18
+#define LED      10
+#define TFT_BL   2
+Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC /* DC */, TFT_CS /* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, -1 /* MISO */);
+Arduino_ST7735 *gfx = new Arduino_ST7735(bus, TFT_RST /* RST */, 3 /* rotation */, true /* IPS */, 80 /* width */, 160 /* height */,
+                      26 /* col offset 1 */, 1 /* row offset 1 */, 26 /* col offset 2 */, 1 /* row offset 2 */);
+const int BTN_A = 37;
+const int BTN_B = 39;
+#include <M5StickC.h>
+
+#elif defined(ARDUINO_TDISPLAYS3)
+/* LILYGO T-Display */
+/* 1.90" ST7789V IPS LCD 170x320 TTGO T-Display (Rotation: 0 bottom, 1 left, 2 top, 3 right) */
+#define TFT_CS   6
+#define TFT_DC   7
+#define TFT_RST  5
+#define TFT_BL   38
+#define LED      2
+Arduino_DataBus *bus = new Arduino_ESP32LCD8(TFT_DC /* DC */, TFT_CS /* CS */, 8 /* WR */, 9 /* RD */, 
+					39 /* D0 */, 40 /* D1 */, 41 /* D2 */, 42 /* D3 */,
+					45 /* D4 */, 46 /* D5 */, 47 /* D6 */, 48 /* D7 */);
+Arduino_GFX *gfx = new Arduino_ST7789(bus, TFT_RST /* RST */, 0 /* rotation */, true /* IPS */, 170 /* width */, 320 /* height */,
+					35 /* col offset 1 */, 0 /* row offset 1 */, 35 /* col offset 2 */, 0 /* row offset 2 */);
+const int BTN_A = 0;
+const int BTN_B = 14;
 
 #elif defined(ARDUINO_TDISPLAY) 
 /* TTGO T-Display */
@@ -83,6 +116,11 @@ const int BTN_B = 15;
 
 #endif /* not selected specific hardware */
 
+// Sleep timer
+//#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
+//#define TIME_TO_SLEEP  1          /* Time ESP32 will go to sleep (in seconds) */
+//RTC_DATA_ATTR int bootCount = 0;
+
 // Rotation & Brightness control
 int rot[2] = {1, 3};
 int backlight[5] = {10, 30, 60, 120, 240};
@@ -98,71 +136,12 @@ int pressB = 0;
 
 String gifArray[30], randGIF_FILENAME, playFile;
 int gifArraySize;
-  
-void listSPIFFS() {
-  gifArraySize = 0;
-  Serial.println("{ls /:[");
-  if (SPIFFS.begin(true)) {
-    File root = SPIFFS.open("/");
-    File file = root.openNextFile();
-    while(file){
-      gifArray[gifArraySize] = String(file.name());
-      Serial.println(("  {#:" + String(gifArraySize) + ", name:" + String(file.name()) + ",                     ").substring(0,40) + "\tsize:" + String(file.size()) + "}");
-      file = root.openNextFile();
-      gifArraySize++;
-    }
-    randGIF_FILENAME = gifArray[random(0, gifArraySize)];
-    //p = millis();
-    //randGIF_FILENAME = gifArray[millis() % gifArraySize];
-    Serial.println("  {randomGIF:" + String(randGIF_FILENAME) +"}");
-    Serial.println("]}");
-  }
-}
 
-void eraseSPIFFS() {
-  if(SPIFFS.begin(true)) {
-    bool formatted = SPIFFS.format();
-    if(formatted) {
-      Serial.println("\n\nSuccess formatting");
-      listSPIFFS();
-    } else {
-      Serial.println("\n\nError formatting");
-    }
-  }
-}
+#include "gifdec.h"  
+#include "spiffs-helper.h"
+#include "gfx-helper.h"
 
-void adjGIF() {
-  if (digitalRead(BTN_A) == 0) {
-    if (pressA == 0) {
-      pressA = 1;
-      inv = !inv;
-      gfx->invertDisplay(inv);
-      Serial.println("{BTN_A:Pressed, Inverted:" + String(inv) + "}");
-      //a++;
-      //if (a >= 2)
-      //  a = 0;
-      //gfx->setRotation(rot[a]);
-      //Serial.println("{BTN_A:Pressed, Rotation:" + String(rot[a]) + "}");
-      //Serial.println("{BTN_A:Pressed}");
-      listSPIFFS();
-    }
-  } else pressA = 0;
-}
-
-void adjBrightness() {
-  if (digitalRead(BTN_B) == 0) {
-    if (pressB == 0) {
-      pressB = 1;
-      b++;
-      //if (b > 15) b = 7;
-      //M5.Axp.ScreenBreath(b);
-      if (b >= 5) b = 0;
-      ledcWrite(pwmLedChannelTFT, backlight[b]);
-      Serial.println("{BTN_B:Pressed, Brightness:" + String(backlight[b]) + "}");
-    }
-  } else pressB = 0;
-}
-    
+// Main subroutine  
 void gfxPlayGIF() {
   // Init SPIFFS
   if (!SPIFFS.begin(true)) {
@@ -241,124 +220,20 @@ void gfxPlayGIF() {
   }
 }
 
-unsigned long testRainbow(uint8_t cIndex) {
-  gfx->fillScreen(BLACK);
-  unsigned long start = micros();
-  int w = gfx->width(), h = gfx->height(), s = h / 8;
-  uint16_t arr [] = { PINK, RED, ORANGE, YELLOW, GREEN, MAGENTA, BLUE, WHITE, PINK, RED, ORANGE, YELLOW, GREEN, MAGENTA, BLUE, WHITE };
-  gfx->fillRect(0, 0, w, s, arr [cIndex]);
-  gfx->fillRect(0, s, w, 2 * s, arr [cIndex + 1]);
-  gfx->fillRect(0, 2 * s, w, 3 * s, arr [cIndex + 2]);
-  gfx->fillRect(0, 3 * s, w, 4 * s, arr [cIndex + 3]);
-  gfx->fillRect(0, 4 * s, w, 5 * s, arr [cIndex + 4]);
-  gfx->fillRect(0, 5 * s, w, 6 * s, arr [cIndex + 5]);
-  gfx->fillRect(0, 6 * s, w, 7 * s, arr [cIndex + 6]);
-  gfx->fillRect(0, 7 * s, w, 8 * s, arr [cIndex + 7]);
-  return micros() - start;
-}
-
-unsigned long testChar(uint16_t colorT, uint16_t colorB) {
-  gfx->fillScreen(colorB);
-  unsigned long start = micros();
-  gfx->setTextColor(GREEN);
-  for (int x = 0; x < 16; x++){
-    gfx->setCursor(10 + x * 8, 2);
-    gfx->print(x, 16);
-  }
-  gfx->setTextColor(BLUE);
-  for (int y = 0; y < 16; y++){
-    gfx->setCursor(2, 12 + y * 10);
-    gfx->print(y, 16);
-  }
-
-  char c = 0;
-  for (int y = 0; y < 16; y++){
-    for (int x = 0; x < 16; x++){
-      gfx->drawChar(10 + x * 8, 12 + y * 10, c++, colorT, colorB);
-    }
-  }
-  return micros() - start;
-}
-
-unsigned long testFilledCircles(uint8_t radius, uint16_t color) {
-  gfx->fillScreen(BLACK);
-  unsigned long start;
-  int x, y, r2 = radius * 2,
-    w = gfx->width(), h = gfx->height();
-  start = micros();
-  for(x=radius; x<w; x+=r2) {
-    for(y=radius; y<h; y+=r2) {
-      gfx->fillCircle(x, y, radius, color);
-    }
-  }
-  return micros() - start;
-}
-
-unsigned long testCircles(uint8_t radius, uint16_t color) {
-  // gfx->fillScreen(BLACK);
-  // Screen is not cleared for this one -- this is
-  // intentional and does not affect the reported time.
-  unsigned long start;
-  int x, y, r2 = radius * 2,
-    w = gfx->width()  + radius, h = gfx->height() + radius;
-  start = micros();
-  for(x=0; x<w; x+=r2) {
-    for(y=0; y<h; y+=r2) {
-      gfx->drawCircle(x, y, radius, color);
-    }
-  }
-  return micros() - start;
-}
-
-void screen_test() {
-	Serial.print(F("Draw Ranbow: "));
-  Serial.println(testRainbow(0));
-  delay(500);
-  Serial.print(F("Draw Ranbow: "));
-  Serial.println(testRainbow(2));
-  delay(500);
-  Serial.print(F("Draw Ranbow: "));
-  Serial.println(testRainbow(4));
-  delay(500);
-  Serial.print(F("Draw Ranbow: "));
-  Serial.println(testRainbow(6));
-  delay(500);
-  Serial.print(F("Draw Filled Circles: "));
-  Serial.println(testFilledCircles(10, MAGENTA));
-  delay(500);
-  Serial.print(F("Draw Circles: "));
-  Serial.println(testCircles(10, BLACK));
-  delay(500);
-  Serial.print(F("Draw Filled Circles: "));
-  Serial.println(testFilledCircles(10, YELLOW));
-  delay(500);
-  Serial.print(F("Draw Circles: "));
-  Serial.println(testCircles(10, BLUE));
-  delay(500);
-  Serial.print(F("Draw Filled Circles: "));
-  Serial.println(testFilledCircles(10, RED));
-  delay(500);
-  Serial.print(F("Draw Circles: "));
-  Serial.println(testCircles(10, WHITE));
-  delay(500);
-  Serial.print(F("Draw Text: "));
-  Serial.println(testChar(WHITE, BLACK));
-  delay(500);
-  Serial.print(F("Draw Text: "));
-  Serial.println(testChar(BLUE, WHITE));
-  delay(500);
-  gfx->fillScreen(BLACK);
-}
-
 void setup() {
+  Serial.begin(115200);
+  delay(500);
+
   pinMode(BTN_A, INPUT_PULLUP);
   pinMode(BTN_B, INPUT);
+
+  Serial.println("{Device:Started}");
 #if defined(ARDUINO_M5STICKC)
   M5.begin();
 #endif
-  Serial.begin(115200);
-  delay(500);
-  Serial.println("{Device:Started}");
+#if defined(ARDUINO_M5STICKCPLUS)
+  M5.begin();
+#endif
 
   listSPIFFS();
   //eraseSPIFFS();
@@ -376,7 +251,7 @@ void setup() {
 #endif
 
 #ifdef DEBUG
-  screen_test();
+  gfxScreenTest();
 #endif
  
   gfxPlayGIF();
@@ -389,6 +264,12 @@ void setup() {
 
   // Put device to sleep
   gfx->displayOff();
+  /*
+  ++bootCount;
+  Serial.println("Boot number: " + String(bootCount));
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  Serial.flush(); 
+   */
   esp_deep_sleep_start();
 }
 
