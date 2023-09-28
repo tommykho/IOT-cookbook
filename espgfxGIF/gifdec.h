@@ -1,11 +1,11 @@
 /*
- * rewrite from: https://github.com/BasementCat/arduino-tft-gif
+ * Adapted from: https://github.com/BasementCat/arduino-tft-gif
+ * Project details: https://github.com/tommykho/IOT-cookbook https://www.hackster.io/tommyho/arduino-animated-gif-player-8964df
 */
-#ifndef _GIFDEC_H_
-#define _GIFDEC_H_
 
 #include <FS.h>
-
+#ifndef _GIFDEC_H_
+#define _GIFDEC_H_
 #define GIF_BUF_SIZE 1024
 
 typedef struct gd_Palette {

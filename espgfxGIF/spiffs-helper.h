@@ -1,4 +1,11 @@
+/*
+ * Author: tommyho510@gmail.com
+ * Project details: https://github.com/tommykho/IOT-cookbook https://www.hackster.io/tommyho/arduino-animated-gif-player-8964df
+*/
+
 #include <SPIFFS.h>
+#ifndef _SPIFFS_H
+#define _SPIFFS_H
 
 void listSPIFFS() {
   gifArraySize = 0;
@@ -31,3 +38,24 @@ void eraseSPIFFS() {
     }
   }
 }
+
+void loadSPIFFS() {
+  // Init SPIFFS
+  if (!SPIFFS.begin(true)) {
+    Serial.println(F("ERROR: SPIFFS mount failed!"));
+    gfx->println(F("ERROR: SPIFFS mount failed!"));
+  } else {
+
+#ifndef GIF_FILENAME
+#define GIF_FILENAME
+    playFile = "/" + String(randGIF_FILENAME);
+    Serial.println("{Opening random GIF_FILENAME " + playFile + "}");
+#else
+    playFile = GIF_FILENAME;
+    Serial.println("{Opening designated GIF_FILENAME " + playFile + "}");
+#endif
+    vFile = SPIFFS.open(playFile);
+  }
+}
+
+#endif /* _SPIFFS_H */

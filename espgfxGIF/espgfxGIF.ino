@@ -1,24 +1,25 @@
-#include <Arduino_GFX_Library.h>  /* Install via Arduino Library Manager */
-
 /*
- *  espgfxGIF Version 2023.08B (Brightness Edition)
+ *  espgfxGIF Version 2023.09B (Brightness Edition)
  *  Board: T-Display S3, T-Display, M5StickC-Plus, M5StickC (esp32)
  *  Author: tommyho510@gmail.com
- *  Original Author: moononournation
+ *  Adapted from: moononournation
+ *  Project details: https://github.com/tommykho/IOT-cookbook https://www.hackster.io/tommyho/arduino-animated-gif-player-8964df
  *  Required: Arduino library Arduino_GFX 1.3.7
  *  Dependency: gifdec.h
+ *  IOT-cookbook Helpers: spiffs, gfx
  *
  *  Please upload SPIFFS data with ESP32 Sketch Data Upload:
  *  https://github.com/me-no-dev/arduino-esp32fs-plugin
  *  GIF src: various
  */
 
+#include <Arduino_GFX_Library.h>  /* Install via Arduino Library Manager */
+
 // *** BEGIN editing of your settings ...
 #define ARDUINO_M5STICKCPLUS
 //#define GIF_FILENAME "/your_file.gif" /* comment out for random GIF */
-// *** END editing of your settings ...
-
 //#define DEBUG /* uncomment this line to start with screen test */
+// *** END editing of your settings ...
 
 #if defined(ARDUINO_M5STICKCPLUS)
 /* M5Stack */
@@ -124,97 +125,88 @@ const int BTN_B = 15;
 // Rotation & Brightness control
 int rot[2] = {1, 3};
 int backlight[5] = {10, 30, 60, 120, 240};
+int axp[5] = {20, 40, 60, 80, 100};
 const int pwmFreq = 5000;
 const int pwmResolution = 8;
 const int pwmLedChannelTFT = 0;
 byte a = 1;
-byte b = 4;
+byte b = 5;
 unsigned long p = 0;
 bool inv = 0;
 int pressA = 0;
 int pressB = 0;
 
-String gifArray[30], randGIF_FILENAME, playFile;
+String gifArray[30], randGIF_FILENAME, playFile, gifFile;
 int gifArraySize;
+File vFile;
 
+// Load IOT-cookbook helpers
 #include "gifdec.h"  
 #include "spiffs-helper.h"
 #include "gfx-helper.h"
+#include "led-helper.h"
 
 // Main subroutine  
 void gfxPlayGIF() {
-  // Init SPIFFS
-  if (!SPIFFS.begin(true)) {
-    Serial.println(F("ERROR: SPIFFS mount failed!"));
-    gfx->println(F("ERROR: SPIFFS mount failed!"));
-  } else {
-
-#ifndef GIF_FILENAME
-#define GIF_FILENAME
-    playFile = "/" + String(randGIF_FILENAME);
-	  Serial.println("{Opening random GIF_FILENAME " + playFile + "}");
-#else
-    playFile = GIF_FILENAME;
-	  Serial.println("{Opening designated GIF_FILENAME " + playFile + "}");
+#if defined(_SPIFFS_H)
+  loadSPIFFS();
 #endif
-    
-    File vFile = SPIFFS.open(playFile);
-    if (!vFile || vFile.isDirectory()) {
-      Serial.println(F("ERROR: Failed to open file for reading"));
-      gfx->println(F("ERROR: Failed to open file for reading"));
-      gfx->println(playFile);
+
+  if (!vFile || vFile.isDirectory()) {
+    Serial.println(F("ERROR: Failed to open file for reading"));
+    gfx->println(F("ERROR: Failed to open file for reading"));
+    gfx->println(playFile);
+  } else {
+    gd_GIF *gif = gd_open_gif(&vFile);
+    if (!gif) {
+      Serial.println(F("gd_open_gif() failed!"));
     } else {
-      gd_GIF *gif = gd_open_gif(&vFile);
-      if (!gif) {
-        Serial.println(F("gd_open_gif() failed!"));
+      int32_t s = gif->width * gif->height;
+      uint8_t *buf = (uint8_t *)malloc(s);
+      if (!buf) {
+        Serial.println(F("buf malloc failed!"));
       } else {
-        int32_t s = gif->width * gif->height;
-        uint8_t *buf = (uint8_t *)malloc(s);
-        if (!buf) {
-          Serial.println(F("buf malloc failed!"));
-        } else {
-          Serial.println(F("{acion:play, GIF:started, Info:["));
-          Serial.printf("  {canvas size: %ux%u}\n", gif->width, gif->height);
-          Serial.printf("  {number of colors: %d}\n", gif->palette->size);
-          Serial.println(F("]}"));
-          
-          int t_fstart, t_delay = 0, t_real_delay, res, delay_until;
-          int duration = 0, remain = 0;
-          while (1) {
-            gfx->setAddrWindow((gfx->width() - gif->width) / 2, (gfx->height() - gif->height) / 2, gif->width, gif->height);
-            t_fstart = millis();
-            t_delay = gif->gce.delay * 10;
-            res = gd_get_frame(gif, buf);
-            if (res < 0) {
-              Serial.println(F("ERROR: gd_get_frame() failed!"));
-              break;
-            } else if (res == 0) {
-              Serial.printf("{action:rewind, duration:%d, remain:%d (%0.1f%%)}\n", duration, remain, 100.0 * remain / duration);
-              duration = 0;
-              remain = 0;
-              gd_rewind(gif);
-              continue;
-            }
- 
-            gfx->startWrite();
-            gfx->writeIndexedPixels(buf, gif->palette->colors, s);
-            gfx->endWrite();
-
-            t_real_delay = t_delay - (millis() - t_fstart);
-            duration += t_delay;
-            remain += t_real_delay;
-            delay_until = millis() + t_real_delay;
-            do {
-              delay(1);
-            } while (millis() < delay_until);
-
-            adjBrightness();
-            adjGIF();
+        Serial.println(F("{acion:play, GIF:started, Info:["));
+        Serial.printf("  {canvas size: %ux%u}\n", gif->width, gif->height);
+        Serial.printf("  {number of colors: %d}\n", gif->palette->size);
+        Serial.println(F("]}"));
+        
+        int t_fstart, t_delay = 0, t_real_delay, res, delay_until;
+        int duration = 0, remain = 0;
+        while (1) {
+          gfx->setAddrWindow((gfx->width() - gif->width) / 2, (gfx->height() - gif->height) / 2, gif->width, gif->height);
+          t_fstart = millis();
+          t_delay = gif->gce.delay * 10;
+          res = gd_get_frame(gif, buf);
+          if (res < 0) {
+            Serial.println(F("ERROR: gd_get_frame() failed!"));
+            break;
+          } else if (res == 0) {
+            Serial.printf("{action:rewind, duration:%d, remain:%d (%0.1f%%)}\n", duration, remain, 100.0 * remain / duration);
+            duration = 0;
+            remain = 0;
+            gd_rewind(gif);
+            continue;
           }
-          Serial.println(F("action:stop, GIF:ended"));
-          Serial.printf("{duration: %d, remain: %d (%0.1f %%)}\n", duration, remain, 100.0 * remain / duration);
-          gd_close_gif(gif);
+
+          gfx->startWrite();
+          gfx->writeIndexedPixels(buf, gif->palette->colors, s);
+          gfx->endWrite();
+
+          t_real_delay = t_delay - (millis() - t_fstart);
+          duration += t_delay;
+          remain += t_real_delay;
+          delay_until = millis() + t_real_delay;
+          do {
+            delay(1);
+          } while (millis() < delay_until);
+
+          adjBrightness();
+          adjGIF();
         }
+        Serial.println(F("action:stop, GIF:ended"));
+        Serial.printf("{duration: %d, remain: %d (%0.1f %%)}\n", duration, remain, 100.0 * remain / duration);
+        gd_close_gif(gif);
       }
     }
   }
@@ -233,10 +225,19 @@ void setup() {
 #endif
 #if defined(ARDUINO_M5STICKCPLUS)
   M5.begin();
+  M5.Beep.tone(4000);
+  delay(250);
+  M5.Beep.mute();
 #endif
 
+#if defined(_LED_H)
+  ledTimer();
+#endif
+
+#if defined(_SPIFFS_H)
   listSPIFFS();
   //eraseSPIFFS();
+#endif
      
   // Init Video
   gfx->begin();

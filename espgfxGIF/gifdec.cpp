@@ -1,10 +1,11 @@
 /*
- * rewrite from: https://github.com/BasementCat/arduino-tft-gif
+ * Adapted from: https://github.com/BasementCat/arduino-tft-gif
+ * Project details: https://github.com/tommykho/IOT-cookbook https://www.hackster.io/tommyho/arduino-animated-gif-player-8964df
 */
+
 #include "gifdec.h"
 #include <sys/types.h>
 #include <FS.h>
-
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 

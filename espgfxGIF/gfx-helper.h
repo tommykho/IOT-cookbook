@@ -1,9 +1,21 @@
+/*
+ * Author: tommyho510@gmail.com
+ * Project details: https://github.com/tommykho/IOT-cookbook https://www.hackster.io/tommyho/arduino-animated-gif-player-8964df
+*/
+
 #include <Arduino_GFX_Library.h>  /* Install via Arduino Library Manager */
+#ifndef _Arduino_GFX_H
+#define _Arduino_GFX_H
 
 // Press BTN_A to invert display
 void adjGIF() {
   if (digitalRead(BTN_A) == 0) {
     if (pressA == 0) {
+#if defined(ARDUINO_M5STICKCPLUS)
+      M5.Beep.tone(3000);
+      delay(250);
+      M5.Beep.mute();
+#endif
       pressA = 1;
       inv = !inv;
       gfx->invertDisplay(inv);
@@ -16,22 +28,43 @@ void adjGIF() {
       //Serial.println("{BTN_A:Pressed}");
       listSPIFFS();
     }
-  } else pressA = 0;
+  } else {
+    pressA = 0;
+    M5.Beep.mute();
+  }
 }
 
 // Press BTN_B to adjust brightness
 void adjBrightness() {
   if (digitalRead(BTN_B) == 0) {
     if (pressB == 0) {
-      pressB = 1;
       b++;
-      //if (b > 15) b = 7;
-      //M5.Axp.ScreenBreath(b);
-      if (b >= 5) b = 0;
+      if (b >= 5) b = 0; 
+
+#if defined(ARDUINO_M5STICKCPLUS)
+      if (b == 4) {
+        M5.Beep.tone(2000);
+        delay(250);
+      } 
+      M5.Beep.tone(3000);
+      delay(250);
+      M5.Beep.mute();
+      M5.Axp.ScreenBreath(axp[b]);
+#endif
+
+#if defined(ARDUINO_M5STICKC)
+      M5.Axp.ScreenBreath(axp[b]);
+#endif
+
       ledcWrite(pwmLedChannelTFT, backlight[b]);
       Serial.println("{BTN_B:Pressed, Brightness:" + String(backlight[b]) + "}");
+
+      pressB = 1;
     }
-  } else pressB = 0;
+  } else {
+    pressB = 0;
+    M5.Beep.mute();
+  }
 }
 
 unsigned long gfxRainbow(uint8_t cIndex) {
@@ -142,3 +175,5 @@ void gfxScreenTest() {
   delay(500);
   gfx->fillScreen(BLACK);
 }
+
+#endif /* _Arduino_GFX_H */

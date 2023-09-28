@@ -54,6 +54,7 @@ Arduino_GFX is a rewritten library from Adafruit_GFX, TFT_eSPI to support variou
 |- gifdec.h
 |- gfx-helper.h
 |- spiffs-helper.h
+|- led-helper.h
 |- data/
    |- youranimated1.gif
    |- youranimeted2.gif  
@@ -93,7 +94,7 @@ For example,
 ## Known bugs:
 
 * Only play a single GIF file in a loop until the power cycle
-* Brightness control is not working with M5StickC & M5StickC-Plus
+* Minor artifact with speaker
 * Minor artifact with M5StickC
 
 ## Features in progress:
