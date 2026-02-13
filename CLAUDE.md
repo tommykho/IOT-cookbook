@@ -34,6 +34,7 @@ IOT-cookbook/
 │   └── m5stickc-plus/
 ├── assets/                  # Image and GIF assets organized by resolution
 ├── flash_tools/             # ESP32/ESP8266 flashing utilities and binaries
+│   └── espROMkit/           #   Python CLI & GUI flash/backup tool (esptool.py)
 ├── resources/               # Plugins (e.g., arduino-esp32fs-plugin for SPIFFS upload)
 └── Readme.md                # Main project README
 ```
@@ -111,6 +112,15 @@ Common functionality is extracted into reusable headers:
 ### Binary data in headers
 
 Large binary assets (logos, images) are stored as `const unsigned char[]` arrays in `.h` files. These files can be very large.
+
+## espROMkit (flash_tools/espROMkit)
+
+Python-based CLI and GUI for backing up and restoring ESP32 flash ROM. Uses [esptool.py](https://github.com/espressif/esptool).
+
+**Run the CLI**: `python flash_tools/espROMkit/espromkit_cli.py`
+**Run the GUI**: `python flash_tools/espROMkit/espromkit_gui.py`
+
+**Dependencies**: `pip install -r flash_tools/espROMkit/requirements.txt` (esptool, pyserial). The GUI also requires tkinter (`apt install python3-tk` on Linux).
 
 ## Testing
 
