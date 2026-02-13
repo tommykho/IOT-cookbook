@@ -7,6 +7,12 @@ Author: tommyho510@gmail.com
 
 Tkinter-based GUI that uses esptool.py to detect, back up,
 restore, and reboot ESP32-based Arduino microcontrollers.
+
+ESP32 Flash Layout (typical):
+  0x1000   — Bootloader (second-stage)
+  0x8000   — Partition table
+  0xe000   — OTA data (if applicable)
+  0x10000  — Application firmware
 """
 
 import sys
@@ -18,7 +24,7 @@ from datetime import datetime
 
 try:
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox, scrolledtext
+    from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
 except ImportError:
     sys.exit(
         "ERROR: tkinter is required for the GUI.\n"
@@ -44,6 +50,14 @@ DEFAULT_FLASH_MODE = "dio"
 DEFAULT_FLASH_FREQ = "80m"
 DEFAULT_FLASH_SIZE = "detect"
 
+# Standard ESP32 flash partition offsets
+ESP32_PARTITIONS = {
+    "bootloader":     {"offset": 0x1000,  "size": 0x7000,  "label": "Bootloader"},
+    "partition_table": {"offset": 0x8000,  "size": 0x1000,  "label": "Partition Table"},
+    "ota_data":       {"offset": 0xe000,  "size": 0x2000,  "label": "OTA Data"},
+    "application":    {"offset": 0x10000, "size": None,     "label": "Application Firmware"},
+}
+
 KNOWN_DEVICES = {
     "ESP32-PICO-D4": "M5StickC / M5StickC-Plus",
     "ESP32-PICO-V3": "M5StickC-Plus2",
@@ -54,7 +68,28 @@ KNOWN_DEVICES = {
 }
 
 FLASH_SIZES = ["detect", "1MB", "2MB", "4MB", "8MB", "16MB"]
+FLASH_SIZE_BYTES = {
+    "detect": 0x400000,
+    "1MB": 0x100000,
+    "2MB": 0x200000,
+    "4MB": 0x400000,
+    "8MB": 0x800000,
+    "16MB": 0x1000000,
+}
 BAUD_RATES = ["115200", "230400", "460800", "921600", "1500000"]
+
+# Backup/Restore mode options
+BACKUP_MODES = [
+    ("Full ROM (0x0)", "full"),
+    ("Partitions (bootloader + partition table + app)", "partitions"),
+    ("App only (0x10000)", "app"),
+]
+RESTORE_MODES = [
+    ("Full ROM (single .bin at 0x0)", "full"),
+    ("Bootloader + App (two .bin files)", "bl_app"),
+    ("App only (.bin at 0x10000)", "app"),
+    ("Custom offset", "custom"),
+]
 
 
 class LogRedirector:
@@ -65,7 +100,6 @@ class LogRedirector:
         self.tag = tag
 
     def write(self, text):
-        # Schedule the update on the main thread
         self.widget.after(0, self._append, text)
 
     def _append(self, text):
@@ -82,8 +116,8 @@ class EspROMkitGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("espROMkit — ESP32 Flash & Backup Tool")
-        self.root.geometry("720x680")
-        self.root.minsize(640, 580)
+        self.root.geometry("760x750")
+        self.root.minsize(680, 650)
 
         self.port_var = tk.StringVar()
         self.baud_var = tk.StringVar(value=str(DEFAULT_BAUD))
@@ -95,7 +129,7 @@ class EspROMkitGUI:
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
-        # Top frame — Port selection
+        # === Port selection ===
         port_frame = ttk.LabelFrame(self.root, text="1. Serial Port", padding=8)
         port_frame.pack(fill="x", padx=10, pady=(10, 4))
 
@@ -109,16 +143,15 @@ class EspROMkitGUI:
         )
 
         ttk.Label(port_frame, text="Baud:").pack(side="left", padx=(12, 2))
-        baud_combo = ttk.Combobox(
+        ttk.Combobox(
             port_frame,
             textvariable=self.baud_var,
             values=BAUD_RATES,
             state="readonly",
             width=10,
-        )
-        baud_combo.pack(side="left")
+        ).pack(side="left")
 
-        # Device info frame
+        # === Device info ===
         info_frame = ttk.LabelFrame(self.root, text="2. Device Info", padding=8)
         info_frame.pack(fill="x", padx=10, pady=4)
 
@@ -132,47 +165,75 @@ class EspROMkitGUI:
         )
         self.info_label.pack(side="left", fill="x", expand=True)
 
-        # Action frame
+        # === Flash layout reference ===
+        layout_frame = ttk.LabelFrame(self.root, text="ESP32 Flash Layout", padding=6)
+        layout_frame.pack(fill="x", padx=10, pady=4)
+        layout_text = (
+            "0x1000 Bootloader   |   0x8000 Partition Table   |   "
+            "0xe000 OTA Data   |   0x10000 Application"
+        )
+        ttk.Label(layout_frame, text=layout_text, font=("Consolas", 9)).pack(anchor="w")
+
+        # === Action frame ===
         action_frame = ttk.LabelFrame(self.root, text="3. Action", padding=8)
         action_frame.pack(fill="x", padx=10, pady=4)
 
-        btn_box = ttk.Frame(action_frame)
-        btn_box.pack(fill="x")
+        # Row 1: backup controls
+        backup_row = ttk.Frame(action_frame)
+        backup_row.pack(fill="x", pady=(0, 6))
 
         self.backup_btn = ttk.Button(
-            btn_box, text="Backup ROM", command=self._on_backup, state="disabled"
+            backup_row, text="Backup ROM", command=self._on_backup, state="disabled"
         )
         self.backup_btn.pack(side="left", padx=(0, 8))
 
+        ttk.Label(backup_row, text="Mode:").pack(side="left", padx=(4, 2))
+        self.backup_mode_var = tk.StringVar(value="full")
+        for label, value in BACKUP_MODES:
+            ttk.Radiobutton(
+                backup_row, text=label, variable=self.backup_mode_var, value=value
+            ).pack(side="left", padx=2)
+
+        # Row 2: restore controls
+        restore_row = ttk.Frame(action_frame)
+        restore_row.pack(fill="x", pady=(0, 6))
+
         self.restore_btn = ttk.Button(
-            btn_box, text="Restore ROM", command=self._on_restore, state="disabled"
+            restore_row, text="Restore ROM", command=self._on_restore, state="disabled"
         )
         self.restore_btn.pack(side="left", padx=(0, 8))
 
+        ttk.Label(restore_row, text="Mode:").pack(side="left", padx=(4, 2))
+        self.restore_mode_var = tk.StringVar(value="full")
+        for label, value in RESTORE_MODES:
+            ttk.Radiobutton(
+                restore_row, text=label, variable=self.restore_mode_var, value=value
+            ).pack(side="left", padx=2)
+
+        # Row 3: reboot + flash size
+        util_row = ttk.Frame(action_frame)
+        util_row.pack(fill="x")
+
         self.reboot_btn = ttk.Button(
-            btn_box, text="Reboot Device", command=self._on_reboot, state="disabled"
+            util_row, text="Reboot Device", command=self._on_reboot, state="disabled"
         )
         self.reboot_btn.pack(side="left", padx=(0, 8))
 
-        # Flash size selector (for backup)
-        ttk.Label(btn_box, text="Flash size:").pack(side="left", padx=(20, 2))
+        ttk.Label(util_row, text="Flash size:").pack(side="left", padx=(20, 2))
         self.flash_size_var = tk.StringVar(value="detect")
-        flash_combo = ttk.Combobox(
-            btn_box,
+        ttk.Combobox(
+            util_row,
             textvariable=self.flash_size_var,
             values=FLASH_SIZES,
             state="readonly",
             width=8,
-        )
-        flash_combo.pack(side="left")
+        ).pack(side="left")
 
-        # Progress bar
-        self.progress = ttk.Progressbar(
-            self.root, mode="indeterminate", length=300
-        )
+        # === Progress bar ===
+        self.progress = ttk.Progressbar(self.root, mode="indeterminate", length=300)
         self.progress.pack(fill="x", padx=10, pady=4)
 
-        # Log output
+        # === Log output ===
         log_frame = ttk.LabelFrame(self.root, text="Log", padding=4)
         log_frame.pack(fill="both", expand=True, padx=10, pady=(4, 10))
 
@@ -265,8 +326,7 @@ class EspROMkitGUI:
                 on_done(rc)
 
         self._set_busy(True)
-        t = threading.Thread(target=worker, daemon=True)
-        t.start()
+        threading.Thread(target=worker, daemon=True).start()
 
     # ------------------------------------------------------- Detect device
     def _on_detect(self):
@@ -279,21 +339,20 @@ class EspROMkitGUI:
         self.log_clear()
         self.log(f"Detecting device on {port} @ {baud} baud...\n\n")
 
-        # We need to capture output to parse chip info
         self.chip_info = {}
         self._detect_output = io.StringIO()
 
         def worker():
             old_stdout, old_stderr = sys.stdout, sys.stderr
-            # Tee to both the log widget and our capture buffer
+
             class Tee:
-                def __init__(self, widget, buf):
-                    self.redir = LogRedirector(widget)
-                    self.buf = buf
-                def write(self, text):
-                    self.redir.write(text)
-                    self.buf.write(text)
-                def flush(self):
+                def __init__(tee_self, widget, buf):
+                    tee_self.redir = LogRedirector(widget)
+                    tee_self.buf = buf
+                def write(tee_self, text):
+                    tee_self.redir.write(text)
+                    tee_self.buf.write(text)
+                def flush(tee_self):
                     pass
 
             tee = Tee(self.log_text, self._detect_output)
@@ -307,7 +366,7 @@ class EspROMkitGUI:
                     "--baud", baud,
                     "--before", "default_reset",
                     "--after", "no_reset",
-                    "chip_id",
+                    "flash_id",
                 ])
             except SystemExit as e:
                 rc = e.code if e.code else 0
@@ -348,6 +407,8 @@ class EspROMkitGUI:
                 info["chip_id"] = s[len("Chip ID:"):].strip()
             elif "Auto-detected Flash size" in s:
                 info["flash_size"] = s.split(":")[-1].strip()
+            elif s.startswith("Detected flash size:"):
+                info["flash_size"] = s.split(":")[-1].strip()
 
         self.chip_info = info
         chip = info.get("chip", "Unknown")
@@ -359,10 +420,25 @@ class EspROMkitGUI:
             self.flash_size_var.set(info["flash_size"])
 
         self.info_label.configure(
-            text=f"{friendly}  |  Chip: {chip}  |  MAC: {mac}",
+            text=f"{friendly}  |  Chip: {chip}  |  MAC: {mac}  |  Flash: {info.get('flash_size', 'N/A')}",
             foreground="black",
         )
         self.log(f"\nDevice confirmed: {friendly}\n")
+        self.log(
+            f"Flash layout: 0x1000=Bootloader | 0x8000=Partitions | "
+            f"0xe000=OTA | 0x10000=Application\n"
+        )
+
+    # --------------------------------------------------------- Helpers
+    def _flash_total_bytes(self):
+        return FLASH_SIZE_BYTES.get(self.flash_size_var.get(), 0x400000)
+
+    def _mac_slug(self):
+        return self.chip_info.get("mac", "unknown").replace(":", "")
+
+    def _default_filename(self, suffix):
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"{self._mac_slug()}_{ts}_{suffix}.bin"
 
     # --------------------------------------------------------- Backup ROM
     def _on_backup(self):
@@ -370,24 +446,25 @@ class EspROMkitGUI:
         if not port:
             return
 
-        flash_size = self.flash_size_var.get()
-        size_map = {
-            "detect": 0x400000,  # default 4MB
-            "1MB": 0x100000,
-            "2MB": 0x200000,
-            "4MB": 0x400000,
-            "8MB": 0x800000,
-            "16MB": 0x1000000,
-        }
-        size_bytes = size_map.get(flash_size, 0x400000)
+        mode = self.backup_mode_var.get()
+        total_bytes = self._flash_total_bytes()
 
-        mac_slug = self.chip_info.get("mac", "unknown").replace(":", "")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"{mac_slug}_{timestamp}.bin"
+        if mode == "full":
+            self._backup_region(port, 0x0, total_bytes, "full")
 
+        elif mode == "partitions":
+            self._backup_partitions(port, total_bytes)
+
+        elif mode == "app":
+            app_off = ESP32_PARTITIONS["application"]["offset"]
+            app_size = total_bytes - app_off
+            self._backup_region(port, app_off, app_size, "app")
+
+    def _backup_region(self, port, offset, size, suffix):
+        """Back up a single flash region via a save-file dialog."""
         path = filedialog.asksaveasfilename(
-            title="Save ROM backup as",
-            initialfile=default_name,
+            title=f"Save {suffix} backup as",
+            initialfile=self._default_filename(suffix),
             defaultextension=".bin",
             filetypes=[("Binary files", "*.bin"), ("All files", "*.*")],
         )
@@ -395,7 +472,10 @@ class EspROMkitGUI:
             return
 
         baud = self.baud_var.get()
-        self.log(f"\nStarting backup: {flash_size} ({size_bytes} bytes) -> {path}\n\n")
+        self.log(
+            f"\nBackup [{suffix}]: 0x{offset:X}..0x{offset + size:X} "
+            f"({size:,} bytes) -> {path}\n\n"
+        )
 
         def on_done(rc):
             if rc == 0 and os.path.exists(path):
@@ -413,11 +493,81 @@ class EspROMkitGUI:
                 "--before", "default_reset",
                 "--after", "no_reset",
                 "read_flash",
-                "0x0", str(size_bytes),
+                hex(offset), str(size),
                 path,
             ],
             on_done=on_done,
         )
+
+    def _backup_partitions(self, port, total_bytes):
+        """Back up bootloader, partition table, and app as separate files."""
+        app_size = total_bytes - ESP32_PARTITIONS["application"]["offset"]
+        parts = [
+            ("bootloader",      0x1000, 0x7000),
+            ("partition_table",  0x8000, 0x1000),
+            ("application",     0x10000, app_size),
+        ]
+
+        # Ask user for a directory to save all three files
+        save_dir = filedialog.askdirectory(title="Select directory to save partition backups")
+        if not save_dir:
+            return
+
+        files = []
+        for name, offset, size in parts:
+            fname = self._default_filename(name)
+            full_path = os.path.join(save_dir, fname)
+            files.append((name, offset, size, full_path))
+
+        summary = "\n".join(
+            f"  {name:20s} 0x{off:05X} ({sz:>10,} bytes) -> {os.path.basename(fp)}"
+            for name, off, sz, fp in files
+        )
+        confirm = messagebox.askyesno(
+            "Confirm Partition Backup",
+            f"Will back up 3 partitions to:\n{save_dir}\n\n{summary}\n\nProceed?",
+        )
+        if not confirm:
+            return
+
+        # Chain the three reads sequentially
+        baud = self.baud_var.get()
+        self.log(f"\nPartition backup to {save_dir}\n")
+
+        def run_chain(idx=0):
+            if idx >= len(files):
+                self._set_busy(False)
+                self.log("\nAll partition backups complete.\n")
+                messagebox.showinfo("Backup Complete", f"3 partitions saved to:\n{save_dir}")
+                return
+
+            name, offset, size, path = files[idx]
+            self.log(f"\n[{idx + 1}/3] {name}: 0x{offset:X}..0x{offset + size:X} ({size:,} bytes)\n")
+
+            def on_part_done(rc):
+                if rc != 0:
+                    self.log(f"\nERROR: Failed to back up {name}.\n")
+                    messagebox.showerror("Backup Failed", f"Failed on {name}. See log.")
+                    return
+                if os.path.exists(path):
+                    fsize = os.path.getsize(path)
+                    self.log(f"  OK: {os.path.basename(path)} ({fsize:,} bytes)\n")
+                self.root.after(100, run_chain, idx + 1)
+
+            self._run_esptool_threaded(
+                [
+                    "--port", port,
+                    "--baud", baud,
+                    "--before", "default_reset",
+                    "--after", "no_reset",
+                    "read_flash",
+                    hex(offset), str(size),
+                    path,
+                ],
+                on_done=on_part_done,
+            )
+
+        run_chain(0)
 
     # -------------------------------------------------------- Restore ROM
     def _on_restore(self):
@@ -425,25 +575,114 @@ class EspROMkitGUI:
         if not port:
             return
 
-        path = filedialog.askopenfilename(
-            title="Select ROM .bin file to flash",
-            filetypes=[("Binary files", "*.bin"), ("All files", "*.*")],
-        )
-        if not path:
-            return
+        mode = self.restore_mode_var.get()
 
-        file_size = os.path.getsize(path)
+        if mode == "full":
+            self._restore_files(port, [("Full ROM", 0x0)])
+
+        elif mode == "bl_app":
+            self._restore_files(
+                port,
+                [("Bootloader", 0x1000), ("Application", 0x10000)],
+            )
+
+        elif mode == "app":
+            self._restore_files(port, [("Application", 0x10000)])
+
+        elif mode == "custom":
+            self._restore_custom(port)
+
+    def _restore_files(self, port, file_specs):
+        """Ask user for .bin file(s) and flash them at the given offsets.
+
+        file_specs: list of (label, offset) pairs. One file dialog per entry.
+        """
+        pairs = []  # (offset_hex, path)
+        details = []
+
+        for label, offset in file_specs:
+            path = filedialog.askopenfilename(
+                title=f"Select {label} .bin file (0x{offset:X})",
+                filetypes=[("Binary files", "*.bin"), ("All files", "*.*")],
+            )
+            if not path:
+                return  # user cancelled
+            fsize = os.path.getsize(path)
+            pairs.append((hex(offset), path))
+            details.append(f"  {label}: {os.path.basename(path)} ({fsize:,} bytes) -> 0x{offset:X}")
+
+        summary = "\n".join(details)
         confirm = messagebox.askyesno(
             "Confirm Restore",
-            f"This will ERASE the device flash and write:\n\n"
-            f"{path}\n({file_size:,} bytes)\n\n"
-            f"Continue?",
+            f"This will ERASE and overwrite flash:\n\n{summary}\n\nContinue?",
         )
         if not confirm:
             return
 
         baud = self.baud_var.get()
-        self.log(f"\nStarting restore: {path} ({file_size:,} bytes)\n\n")
+        self.log(f"\nStarting restore...\n{summary}\n\n")
+
+        # Build esptool args with multiple offset+file pairs
+        args = [
+            "--port", port,
+            "--baud", baud,
+            "--before", "default_reset",
+            "--after", "no_reset",
+            "write_flash",
+            "-z",
+            "--flash_mode", DEFAULT_FLASH_MODE,
+            "--flash_freq", DEFAULT_FLASH_FREQ,
+            "--flash_size", DEFAULT_FLASH_SIZE,
+        ]
+        for offset_hex, path in pairs:
+            args.extend([offset_hex, path])
+
+        def on_done(rc):
+            if rc == 0:
+                self.log("\nRestore complete.\n")
+                messagebox.showinfo("Restore Complete", "Flash write finished successfully.")
+            else:
+                self.log("\nRestore FAILED.\n")
+                messagebox.showerror("Restore Failed", "See log for details.")
+
+        self._run_esptool_threaded(args, on_done=on_done)
+
+    def _restore_custom(self, port):
+        """Restore with a user-specified flash offset."""
+        path = filedialog.askopenfilename(
+            title="Select .bin file for custom restore",
+            filetypes=[("Binary files", "*.bin"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        # Ask for offset via a small dialog
+        offset_str = simpledialog.askstring(
+            "Flash Offset",
+            "Enter flash offset in hex (e.g. 0x10000):",
+            initialvalue="0x10000",
+        )
+        if not offset_str:
+            return
+
+        try:
+            offset = int(offset_str, 0)
+        except ValueError:
+            messagebox.showerror("Invalid Offset", f"'{offset_str}' is not a valid hex number.")
+            return
+
+        fsize = os.path.getsize(path)
+        confirm = messagebox.askyesno(
+            "Confirm Custom Restore",
+            f"File: {os.path.basename(path)} ({fsize:,} bytes)\n"
+            f"Offset: 0x{offset:X}\n\n"
+            f"This will overwrite flash at this offset. Continue?",
+        )
+        if not confirm:
+            return
+
+        baud = self.baud_var.get()
+        self.log(f"\nCustom restore: {path} ({fsize:,} bytes) -> 0x{offset:X}\n\n")
 
         def on_done(rc):
             if rc == 0:
@@ -464,7 +703,7 @@ class EspROMkitGUI:
                 "--flash_mode", DEFAULT_FLASH_MODE,
                 "--flash_freq", DEFAULT_FLASH_FREQ,
                 "--flash_size", DEFAULT_FLASH_SIZE,
-                "0x0", path,
+                hex(offset), path,
             ],
             on_done=on_done,
         )
