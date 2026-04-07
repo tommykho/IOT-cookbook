@@ -77,3 +77,13 @@ Tommy Ho has been coding since before the web existed, with a passion for Python
 ## Suggestions and Feedback
 
 [Click here](mailto:tommyho510@gmail.com) for feedback or suggestions.
+
+## License
+
+This project is licensed under the [GNU General Public License v3.0 (GPL-3.0)](https://github.com/tommykho/edgetts/blob/main/LICENSE).
+
+## Support
+
+If you find this useful, consider buying me a coffee!
+
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/tommykho)
