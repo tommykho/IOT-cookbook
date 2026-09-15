@@ -8,7 +8,6 @@ Projects, firmware backups and notes for "Cheap Yellow Display" style ESP32 touc
 | [splash](splash/) | Animated GIF boot splash with fade in/out |
 | [devices/ESP32-3248S035](devices/ESP32-3248S035/) | Factory firmware backup, `videoplayer.bin`, `restore.cmd` |
 | [devices/JC3248W535C](devices/JC3248W535C/) | Factory firmware backup (Guition 3.5" ESP32-S3), `restore.cmd` |
-| `pic/` | Sample JPEGs |
 | `music/` | SD card layout for MP3 players (`wifi.json` placeholder; MP3s not in git) |
 | `mjpeg/` | SD card videos (not in git; convert with the ffmpeg command in cyd-video-player) |
 

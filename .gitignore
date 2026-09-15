@@ -24,3 +24,6 @@ __pycache__/
 *.m4a
 *.wma
 Thumbs.db
+
+# Local sample images, not published
+cyd-cookbook/pic/
