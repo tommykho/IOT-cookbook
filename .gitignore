@@ -1,0 +1,26 @@
+# Flash dumps from flash_tools/esp32_backup.py -- multi-MB binaries,
+# device-specific, not source.
+backups/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Video and music files: large and often third-party copyrighted, keep local only
+*.mjpeg
+*.mjpg
+*.mp4
+*.m4v
+*.avi
+*.mov
+*.mkv
+*.webm
+*.wmv
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.aac
+*.m4a
+*.wma
+Thumbs.db
