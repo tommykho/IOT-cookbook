@@ -41,6 +41,7 @@ public:
     _widthLimit = widthLimit;
     _heightLimit = heightLimit;
     _inputindex = 0;
+    _scale = -1; // recompute scale and centering for each video
 
     if (!_read_buf)
     {
@@ -76,7 +77,7 @@ public:
     while ((_buf_read > 0) && (!found_FFD8))
     {
       i = 0;
-      while ((i < _buf_read) && (!found_FFD8))
+      while ((i + 1 < _buf_read) && (!found_FFD8))
       {
         if ((_read_buf[i] == 0xFF) && (_read_buf[i + 1] == 0xD8)) // JPEG header
         {
@@ -91,7 +92,12 @@ public:
       }
       else
       {
-        _buf_read = _input->readBytes(_read_buf, READ_BUFFER_SIZE);
+        // keep a trailing 0xFF so a header split across two reads is still found
+        int keep = (_buf_read > 0 && _read_buf[_buf_read - 1] == 0xFF) ? 1 : 0;
+        if (keep)
+          _read_buf[0] = 0xFF;
+        int32_t n = _input->readBytes(_read_buf + keep, READ_BUFFER_SIZE - keep);
+        _buf_read = (n > 0) ? n + keep : 0;
         vTaskDelay(1); // scanning non-JPEG data (e.g. AVI chunks), keep the watchdog fed
       }
     }
@@ -110,7 +116,7 @@ public:
         }
         else
         {
-          while ((i < _buf_read) && (!found_FFD9))
+          while ((i + 1 < _buf_read) && (!found_FFD9))
           {
             if ((_p[i] == 0xFF) && (_p[i + 1] == 0xD9)) // JPEG trailer
             {
@@ -134,11 +140,11 @@ public:
         if (o > 0)
         {
           // Serial.printf("o: %d\n", o);
-          memcpy(_read_buf, _p + i, o);
-          _buf_read = _input->readBytes(_read_buf + o, READ_BUFFER_SIZE - o);
+          memmove(_read_buf, _p + i, o); // regions can overlap
+          int32_t n = _input->readBytes(_read_buf + o, READ_BUFFER_SIZE - o);
           _p = _read_buf;
-          _inputindex += _buf_read;
-          _buf_read += o;
+          _inputindex += n;
+          _buf_read = (n > 0 || i > 0) ? o + n : 0; // no progress and no more input: stop
           // Serial.printf("_buf_read: %d\n", _buf_read);
         }
         else
@@ -209,24 +215,17 @@ public:
         _jpgWidth /= 8;
         _jpgHeight /= 8;
       }
-      _jpeg.setMaxOutputSize(iMaxMCUs);
+      _maxMCUs = iMaxMCUs;
       _x = (_jpgWidth > _widthLimit) ? 0 : ((_widthLimit - _jpgWidth) / 2);
-      _y = (_heightLimit - _jpgHeight) / 2;
+      _y = (_jpgHeight > _heightLimit) ? 0 : ((_heightLimit - _jpgHeight) / 2);
     }
+    _jpeg.setMaxOutputSize(_maxMCUs); // openRAM resets it
     if (_useBigEndian)
     {
       _jpeg.setPixelType(RGB565_BIG_ENDIAN);
     }
-    // center the image on the display
-    int iXOff, iYOff;
-    iXOff = (_widthLimit - _jpeg.getWidth()) / 2;
-    if (iXOff < 0)
-      iXOff = 0;
-    iYOff = (_heightLimit - _jpeg.getHeight()) / 2;
-    if (iYOff < 0)
-      iYOff = 0;
-
-    _jpeg.decode(iXOff, iYOff, _scale);
+    // center the (scaled) image on the display
+    _jpeg.decode(_x, _y, _scale);
     _jpeg.close();
 
     return true;
@@ -249,6 +248,7 @@ private:
 
   JPEGDEC _jpeg;
   int _scale = -1;
+  int _maxMCUs = 1000;
 
   int32_t _inputindex = 0;
   int32_t _buf_read;

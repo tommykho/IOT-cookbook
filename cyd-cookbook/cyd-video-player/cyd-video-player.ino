@@ -126,14 +126,16 @@ TFT_Touch touch = TFT_Touch(T_CS, T_CLK, T_DIN, T_DO);
 
 // Interrupt to skip to the next mjpeg when the boot button is pressed
 volatile bool skipRequested = false; // set in ISR, read in loop()
-volatile uint32_t isrTick = 0;       // tick count captured in ISR
-uint32_t lastPress = 0;              // used in main context for debounce
+volatile uint32_t isrTick = 0;       // tick of the last accepted press
 uint32_t lastTouchSkip = 0;          // debounce for touch screen skips
 
 void IRAM_ATTR onButtonPress()
 {
-    skipRequested = true;                 // flag handled in the playback loop
-    isrTick = xTaskGetTickCountFromISR(); // safe, 1-tick resolution
+    uint32_t now = xTaskGetTickCountFromISR(); // safe, 1-tick resolution
+    if (now - isrTick < pdMS_TO_TICKS(BOOT_BUTTON_DEBOUCE_TIME))
+        return; // contact bounce of press or release
+    isrTick = now;
+    skipRequested = true; // flag handled in the playback loop
 }
 
 // Reader task runs on Core 0 - reads MJPEG frames into double buffer
@@ -243,6 +245,18 @@ void setup()
     }
 
     loadMjpegFilesList(); // Load the list of mjpeg to play from the SD card
+    if (mjpegCount == 0)
+    {
+        Serial.printf("No .mjpeg files in %s\n", MJPEG_FOLDER);
+        gfx->setTextColor(RGB565_WHITE);
+        gfx->setTextSize(2);
+        gfx->setCursor(10, 10);
+        gfx->printf("No .mjpeg files in %s", MJPEG_FOLDER);
+        while (true)
+        {
+            delay(1000);
+        }
+    }
 
     // Set the boot button to skip the current mjpeg playing and go to the next
     pinMode(BOOT_PIN, INPUT);
@@ -391,7 +405,7 @@ void mjpegPlayFromSDCard(char *mjpegFilename)
         unsigned long frameStart, waitStart, waitEnd, decodeStart, decodeEnd, touchPollStart, touchPollEnd;
         int readIndex = 0;
 
-        while (!skipRequested && !endOfFile)
+        while (!skipRequested) // exits on the reader's zero-length end-of-file frame
         {
             frameStart = micros();
 
@@ -507,16 +521,7 @@ void mjpegPlayFromSDCard(char *mjpegFilename)
         }
         readerTaskHandle = NULL;
 
-        // Handle skip button debounce
-        if (skipRequested)
-        {
-            uint32_t now = millis();
-            if (now - lastPress >= BOOT_BUTTON_DEBOUCE_TIME)
-            {
-                lastPress = now;
-            }
-        }
-        skipRequested = false;
+        skipRequested = false; // debounced in onButtonPress()
 
         Serial.println(F("MJPEG end"));
         mjpegFile.close();
