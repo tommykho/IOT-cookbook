@@ -1,0 +1,12 @@
+# Flash dumps from flash_tools/esp32_backup.py -- multi-MB binaries,
+# device-specific, not source.
+backups/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# cyd-cookbook media: large and third-party copyrighted, keep local only
+cyd-cookbook/mjpeg/
+cyd-cookbook/music/*.mp3
+Thumbs.db

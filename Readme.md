@@ -16,6 +16,8 @@ License: MIT
 | [espgfx_helloworld](espgfx_helloworld/) | Minimal hello-world graphics example | M5StickC-Plus, M5StickC, T-Display S3, T-Display, D1 Mini |
 | [tdisplay-uncanny-eyes](lilygo-cookbook/tdisplay-uncanny-eyes/) | Animated eyes with 30 swappable eye styles | TTGO T-Display |
 | [espROMkit](flash_tools/espROMkit/) | CLI & GUI tool to back up and restore ESP32 flash ROM | Any ESP32 board |
+| [cyd-video-player](cyd-cookbook/cyd-video-player/) | MJPEG video player from SD card | ESP32-3248S035, ESP32-2432S028 |
+| [cyd-cookbook](cyd-cookbook/) | CYD board firmware backups, pinouts, video benchmarks | ESP32-3248S035, JC3248W535C |
 
 ## Supported Microcontrollers
 
@@ -29,6 +31,8 @@ License: MIT
 - Ai-Thinker ESP32-CAM / ESP-32S
 - HELTEC HTIT-WB32 w/ OLED (ESP32)
 - NodeMCU ESP32
+- Sunton ESP32-3248S035 / ESP32-2432S028R "Cheap Yellow Display" (ESP32 + ST7796 / ILI9341)
+- Guition JC3248W535C (ESP32-S3 + AXS15231B QSPI)
 
 **ESP8266:**
 - NodeMCU V3
@@ -48,6 +52,10 @@ IOT-cookbook/
 ├── espgfx_helloworld/          # Hello-world graphics example
 ├── lilygo-cookbook/
 │   └── tdisplay-uncanny-eyes/  # Animated eyes for T-Display
+├── cyd-cookbook/                # Cheap Yellow Display boards
+│   ├── cyd-video-player/       # MJPEG video player
+│   ├── splash/                 # GIF boot splash
+│   └── devices/                # Firmware backups + restore scripts
 ├── flash_tools/
 │   └── espROMkit/              # ESP32 flash backup/restore tool (Python)
 ├── devices/                    # Per-device pin configs and documentation
