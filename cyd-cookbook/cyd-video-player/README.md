@@ -1,4 +1,4 @@
-# Cheap Yellow Display Video Player (ESP32-2432S028)
+# Cheap Yellow Display Video Player (ESP32-3248S035)
 
 ## ESP32-3248S035 (3.5" ST7796) port
 Select the board at the top of `cyd-video-player.ino` (`#define ESP32_3248S035`, the default). Touch is disabled on this board (its XPT2046 shares the display SPI pins); press BOOT to skip to the next video.
