@@ -37,7 +37,7 @@ python -m esptool --port COMx --before no-reset --baud 460800 write-flash 0 <fil
 | Board | Video | FPS |
 |---|---|---|
 | ESP32-3248S035 | 480x320 | 11 (decode 52 ms + SPI draw 38 ms) |
-| ESP32-3248S035 | 320x214 | 24.5 (decode 23 ms + draw 17 ms) |
+| ESP32-3248S035 | 320x214 | 22.6 (decode 27 ms + draw 17 ms) |
 
 Classic ESP32 boards without PSRAM on single-line SPI top out around 11 fps full-screen at 320x480. For video at this resolution use an ESP32-S3 board with PSRAM and a QSPI/parallel/RGB display (JC3248W535C, T-Display S3).
 

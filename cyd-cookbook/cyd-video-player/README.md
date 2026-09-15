@@ -3,7 +3,7 @@
 ## ESP32-3248S035 (3.5" ST7796) port
 Select the board at the top of `cyd-video-player.ino` (`#define ESP32_3248S035`, the default). Touch is disabled on this board (its XPT2046 shares the display SPI pins); press BOOT to skip to the next video.
 Plays landscape (480x320), smaller videos are centered. Frames play as fast as the ESP32 can decode+draw them, so match the encode fps to what it reaches or video runs slow-motion. Measured:
-- 320x214 @ 24 fps: 24.5 fps (decode 23 ms, draw 17 ms) — recommended
+- 320x214 @ 24 fps: 22.6 fps over a full 2400-frame video (decode 27 ms, draw 17 ms), about 6% slower than real time — recommended
 - 480x320 @ 10 fps: 11 fps (decode 52 ms, draw 38 ms)
 ```
 ffmpeg -y -i input.mp4 -pix_fmt yuvj420p -q:v 7 -vf "fps=24,scale=320:-2:flags=lanczos" -an output.mjpeg

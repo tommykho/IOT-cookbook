@@ -185,41 +185,35 @@ public:
     if (_scale == -1)
     {
       // scale to fit height
-      int iMaxMCUs;
       _jpgWidth = _jpeg.getWidth();
       _jpgHeight = _jpeg.getHeight();
       float ratio = (float)_jpgHeight / _heightLimit;
       if (ratio <= 1)
       {
         _scale = 0;
-        iMaxMCUs = _widthLimit / 16;
       }
       else if (ratio <= 2)
       {
         _scale = JPEG_SCALE_HALF;
-        iMaxMCUs = _widthLimit / 8;
         _jpgWidth /= 2;
         _jpgHeight /= 2;
       }
       else if (ratio <= 4)
       {
         _scale = JPEG_SCALE_QUARTER;
-        iMaxMCUs = _widthLimit / 4;
         _jpgWidth /= 4;
         _jpgHeight /= 4;
       }
       else
       {
         _scale = JPEG_SCALE_EIGHTH;
-        iMaxMCUs = _widthLimit / 2;
         _jpgWidth /= 8;
         _jpgHeight /= 8;
       }
-      _maxMCUs = iMaxMCUs;
       _x = (_jpgWidth > _widthLimit) ? 0 : ((_widthLimit - _jpgWidth) / 2);
       _y = (_jpgHeight > _heightLimit) ? 0 : ((_heightLimit - _jpgHeight) / 2);
     }
-    _jpeg.setMaxOutputSize(_maxMCUs); // openRAM resets it
+    // no setMaxOutputSize: openRAM resets it every frame, so the library default is what applies
     if (_useBigEndian)
     {
       _jpeg.setPixelType(RGB565_BIG_ENDIAN);
@@ -248,7 +242,6 @@ private:
 
   JPEGDEC _jpeg;
   int _scale = -1;
-  int _maxMCUs = 1000;
 
   int32_t _inputindex = 0;
   int32_t _buf_read;
