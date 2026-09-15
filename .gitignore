@@ -6,7 +6,21 @@ backups/
 __pycache__/
 *.pyc
 
-# cyd-cookbook media: large and third-party copyrighted, keep local only
-cyd-cookbook/mjpeg/
-cyd-cookbook/music/*.mp3
+# Video and music files: large and often third-party copyrighted, keep local only
+*.mjpeg
+*.mjpg
+*.mp4
+*.m4v
+*.avi
+*.mov
+*.mkv
+*.webm
+*.wmv
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.aac
+*.m4a
+*.wma
 Thumbs.db
