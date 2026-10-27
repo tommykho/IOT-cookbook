@@ -5,6 +5,8 @@ Photo slideshow (JPG, GIF), MJPEG video and MP3/WAV audio from the SD card. Medi
 
 **Status: compiles, not yet tested on hardware.**
 
+Prebuilt image: [`devices/ESP32-3248S035/mediaplayer.bin`](../devices/ESP32-3248S035/) (flash at offset 0, see the [cyd-cookbook README](../README.md#firmware-backups)).
+
 ### Flow
 1. Power on: slideshow from `/photos` (videos from `/mjpeg` if there are no photos, else the menu).
 2. Tap the screen: main menu with Photos, Slideshow, Video, Audio and Receive. Wi-Fi client and Settings are greyed-out placeholders.

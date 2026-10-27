@@ -6,7 +6,7 @@ Projects, firmware backups and notes for "Cheap Yellow Display" style ESP32 touc
 |---|---|
 | [cyd-video-player](cyd-video-player/) | MJPEG video, JPG/GIF slideshow and MP3/WAV player with Wi-Fi upload from a phone (ESP32-3248S035, ESP32-2432S028) |
 | [splash](splash/) | Animated GIF boot splash with fade in/out |
-| [devices/ESP32-3248S035](devices/ESP32-3248S035/) | Factory firmware backup, `videoplayer.bin`, `restore.cmd` |
+| [devices/ESP32-3248S035](devices/ESP32-3248S035/) | Factory firmware backup, `videoplayer.bin`, `mediaplayer.bin`, `restore.cmd` |
 | [devices/JC3248W535C](devices/JC3248W535C/) | Factory firmware backup (Guition 3.5" ESP32-S3), `restore.cmd` |
 | `music/` | SD card layout for MP3 players (`wifi.json` placeholder; MP3s not in git) |
 | `mjpeg/` | SD card videos (not in git; convert with the ffmpeg command in cyd-video-player) |
@@ -29,7 +29,7 @@ Restore / flash (write at offset 0):
 ```
 python -m esptool --port COMx --before no-reset --baud 460800 write-flash 0 <file>.bin
 ```
-- **ESP32-3248S035**: auto-download does not work, hold BOOT, tap RST, release BOOT before flashing. `videoplayer.bin` is the cyd-video-player build (merged image).
+- **ESP32-3248S035**: auto-download does not work, hold BOOT, tap RST, release BOOT before flashing. `videoplayer.bin` is the cyd-video-player 2026.09A build (video only, hardware-tested). `mediaplayer.bin` is the 2026.10A build (video, slideshow, audio, Wi-Fi upload; Huge APP partition; **not yet tested on hardware**). Both are full 4 MB merged images, so flashing either resets NVS and `mediaplayer.bin` runs touch calibration again on first boot.
 - **JC3248W535C**: native USB (USB-Serial/JTAG), no button needed.
 
 ## Video performance (measured, MJPEG from SD)
