@@ -1,69 +1,31 @@
 /*
- *  cyd-video-player Version 2026.09A
+ *  cyd-video-player Version 2026.10A
  *  Board: ESP32-3248S035, ESP32-2432S028
  *  Based on: https://github.com/kiwiholmberg/cyd-video-player (MIT)
  *  Author: tommyho510@gmail.com
+ *
+ *  MJPEG video player, JPG/GIF slideshow and MP3/WAV player with Wi-Fi upload from a
+ *  phone (Receive: SoftAP + QR code + captive portal). Boots into the slideshow, a tap
+ *  opens the menu. Board selection, pins and limits are in config.h.
  */
 // Tutorial : https://youtu.be/jYcxUgxz9ks
-// Use board "ESP32 Dev Module" (last tested on v3.2.0)
+// Use board "ESP32 Dev Module", Partition Scheme "Huge APP (3MB No OTA/1MB SPIFFS)" (last tested on v3.2.0)
+// LVGL is configured by build_opt.h in this folder, no lv_conf.h needed
 
-// *** BEGIN editing of your settings ...
-#define ESP32_3248S035    /* 3.5" ST7796 320x480 */
-//#define ESP32_2432S028  /* 2.8" ILI9341 240x320 */
-// *** END editing of your settings ...
-
-#include <Arduino_GFX_Library.h> // Install "GFX Library for Arduino" with the Library Manager (last tested on v1.6.0)
-                                 // Install "JPEGDEC" with the Library Manager (last tested on v1.8.2)
-#define MJPEG_BUF_SIZE 64000     // Max bytes per JPEG frame, larger frames are dropped
+#include "config.h"              // *** edit your settings there
+#include "app.h"
+#include "display.h"             // Install "GFX Library for Arduino" (last tested on v1.6.9) and "lvgl" (v9.6.0)
+#include "storage.h"
+#include "slideshow.h"
+#include "audio.h"
+#include "menu.h"
+#include "receive.h"
 #include "MjpegClass.h"          // Included in this project
-#include "SD.h"                  // Included with the Espressif Arduino Core (last tested on v3.2.0)
-#if defined(ESP32_2432S028)
-#include <TFT_Touch.h>           // Touch screen library - Install "TFT_Touch" with the Library Manager
-#define HAS_TOUCH
-#endif
+                                 // Install "JPEGDEC" with the Library Manager (last tested on v1.8.4)
 
-// Touch screen pins (XPT2046 on ESP32-2432S028)
-#define T_DO   39   // Data out pin (MISO)
-#define T_DIN  32   // Data in pin (MOSI)
-#define T_CS   33   // Chip select pin
-#define T_CLK  25   // Clock pin
-
-// Pins for the display
-#if defined(ESP32_3248S035)
-#define BL_PIN 27
-#else
-#define BL_PIN 21 // On some cheap yellow display model, BL pin is 27
-#endif
-#define SD_CS 5
-#define SD_MISO 19
-#define SD_MOSI 23
-#define SD_SCK 18
-
-#define BOOT_PIN 0                   // Boot pin
-#define BOOT_BUTTON_DEBOUCE_TIME 400 // Debounce time when reading the boot button in milliseconds
-#define TOUCH_POLL_INTERVAL_MS 100   // Poll touch screen every 100ms instead of every frame
-#define TOUCH_SKIP_DEBOUNCE_MS 1000  // Only skip one video per second when touch is held
-
-// Some model of cheap Yellow display works only at 40Mhz
-#if defined(ESP32_3248S035)
-#define DISPLAY_SPI_SPEED 80000000L // 80MHz, drop to 40MHz if the picture is scrambled
-#else
-// #define DISPLAY_SPI_SPEED 80000000L // 80MHz
-#define DISPLAY_SPI_SPEED 40000000L // 40MHz
-#endif
-
-
-#define SD_SPI_SPEED 20000000L      // 20Mhz, 80Mhz mounts unreliably on some cards
-
-const char *MJPEG_FOLDER = "/mjpeg"; // Name of the mjpeg folder on the SD Card
-
-// Storage for files to read on the SD card
-#define MAX_FILES 20 // Maximum number of files, adjust as needed
-String mjpegFileList[MAX_FILES];
-uint32_t mjpegFileSizes[MAX_FILES] = {0}; // Store each GIF file's size in bytes
-int mjpegCount = 0;
+// mjpeg files to play from the SD card
+static std::vector<String> mjpegFiles;
 static int currentMjpegIndex = 0;
-static File mjpegFile; // temp gif file holder
 
 // Global variables for mjpeg
 MjpegClass mjpeg;
@@ -103,31 +65,10 @@ struct VideoStats {
 // Global stats instance (reset per video)
 VideoStats stats;
 
-// Display global variables (using ESP32SPI with DMA for better performance)
-Arduino_DataBus *bus = new Arduino_ESP32SPI(
-    2 /* DC */, 15 /* CS */, 14 /* SCK */, 13 /* MOSI */, 12 /* MISO */,
-    HSPI /* SPI bus - display uses HSPI pins */
-);
-#if defined(ESP32_3248S035)
-Arduino_GFX *gfx = new Arduino_ST7796(bus);
-#else
-Arduino_GFX *gfx = new Arduino_ILI9341(bus);
-#endif
-
-// SD Card reader is on a separate SPI
-SPIClass sd_spi(VSPI);
-
-// Touch screen instance
-// ponytail: 3248S035R touch (XPT2046) shares the display SPI pins, so the bit-banged TFT_Touch
-// can't be used there; BOOT button skips instead. Add XPT2046 on the HSPI bus if touch-skip matters.
-#ifdef HAS_TOUCH
-TFT_Touch touch = TFT_Touch(T_CS, T_CLK, T_DIN, T_DO);
-#endif
-
 // Interrupt to skip to the next mjpeg when the boot button is pressed
 volatile bool skipRequested = false; // set in ISR, read in loop()
 volatile uint32_t isrTick = 0;       // tick of the last accepted press
-uint32_t lastTouchSkip = 0;          // debounce for touch screen skips
+volatile bool exitRequested = false; // tap during a video: back to the menu
 
 void IRAM_ATTR onButtonPress()
 {
@@ -175,6 +116,103 @@ void readerTask(void *param)
     vTaskDelete(NULL);
 }
 
+// ---------------------------------------------------------------- App state machine
+
+static AppState state = STATE_MENU;
+static volatile bool statePending = false;
+static AppState pendingState;
+static String pendingPath;
+static uint32_t bootHeldSince = 0; // BOOT held in the menu: recalibrate touch
+
+void appRequestState(AppState s, const char *path)
+{
+    pendingState = s;
+    pendingPath = path ? path : "";
+    statePending = true;
+}
+
+static void showMenu(const char *message)
+{
+    char summary[96];
+    if (!message)
+    {
+        snprintf(summary, sizeof(summary), "%d photos, %d videos, %d tracks",
+                 countMedia(PHOTO_FOLDER, isPhoto), countMedia(MJPEG_FOLDER, isVideo), countMedia(AUDIO_FOLDER, isAudio));
+        message = summary;
+    }
+    menuShow(message);
+    lvglResume();
+}
+
+static void enterState(AppState s, const String &path)
+{
+    AppState prev = state;
+    if (prev == STATE_SLIDESHOW || prev == STATE_PHOTO_VIEW)
+        slideshowEnd();
+    if (prev == STATE_RECEIVE)
+        receiveStop();
+    state = s;
+    skipRequested = false;
+    LOGF("State %d -> %d, free heap %lu, largest block %u\n", prev, s, ESP.getFreeHeap(),
+         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    switch (s)
+    {
+    case STATE_MENU:
+        showMenu(nullptr);
+        break;
+    case STATE_AUDIO_PLAYER:
+        audioScreenShow();
+        lvglResume();
+        if (path.length())
+            audioPlay(path.c_str());
+        break;
+    case STATE_SLIDESHOW:
+    case STATE_PHOTO_VIEW:
+        lvglSuspend(); // audio keeps playing: it only uses arenaAudio()
+        if (!slideshowBegin(path.c_str(), s == STATE_SLIDESHOW))
+        {
+            state = STATE_MENU;
+            showMenu("No photos in " PHOTO_FOLDER ". Tap Receive to add some.");
+        }
+        break;
+    case STATE_VIDEO:
+        listMedia(MJPEG_FOLDER, isVideo, mjpegFiles);
+        if (mjpegFiles.empty())
+        {
+            state = STATE_MENU;
+            showMenu("No .mjpeg files in " MJPEG_FOLDER ". Tap Receive to add some.");
+            break;
+        }
+        audioStop(true); // video needs both arena buffers
+        currentMjpegIndex = 0;
+        for (size_t i = 0; i < mjpegFiles.size(); i++)
+            if (path.endsWith("/" + mjpegFiles[i]))
+                currentMjpegIndex = i;
+        exitRequested = false;
+        lvglSuspend();
+        break;
+    case STATE_RECEIVE:
+        audioStop(true); // frees arenaAudio() for the upload buffer and the CPU for Wi-Fi
+        receiveStart();
+        lvglResume();
+        break;
+    }
+}
+
+// Receive finished: show what arrived
+static void finishReceive()
+{
+    MediaType t = receiveLastType();
+    if (receiveCount() == 0)
+        appRequestState(STATE_MENU);
+    else if (isPhoto(t))
+        appRequestState(STATE_SLIDESHOW, receiveFirstPhotoPath().c_str());
+    else if (isAudio(t))
+        appRequestState(STATE_AUDIO_PLAYER, receiveLastPath().c_str());
+    else
+        appRequestState(STATE_VIDEO, receiveLastPath().c_str());
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -195,82 +233,96 @@ void setup()
     }
     Serial.printf("Allocated %d MJPEG buffers of %d bytes each\n", NUM_BUFFERS, MJPEG_BUF_SIZE);
 
-    // Set display backlight to High
-    pinMode(BL_PIN, OUTPUT);
-    digitalWrite(BL_PIN, HIGH);
-
-    // Display initialization
-    Serial.println("Display initialization");
-    if (!gfx->begin(DISPLAY_SPI_SPEED))
+    if (!displayBegin())
     {
-        Serial.println("Display initialization failed!");
-        while (true)
-        {
-            /* no need to continue */
-        }
-    }
-#if defined(ESP32_3248S035)
-    gfx->setRotation(1); // landscape 480x320
-#else
-    gfx->setRotation(0);
-#endif
-    gfx->fillScreen(RGB565_BLACK);
-    // gfx->invertDisplay(true); // on some cheap yellow models, display must be inverted
-    Serial.printf("Screeen size Width=%d,Height=%d\n", gfx->width(), gfx->height());
-
-    // Touch screen initialization
-#ifdef HAS_TOUCH
-    touch.setRotation(0); // Match display rotation
-#endif
-
-    // SD card initialization
-    Serial.println("SD Card initialization");
-    bool sdOk = false;
-    for (int attempt = 0; attempt < 3 && !sdOk; attempt++) // card may still be busy after a soft reset
-    {
-        sdOk = SD.begin(SD_CS, sd_spi, SD_SPI_SPEED, "/sd");
-        if (!sdOk)
-        {
-            SD.end();
-            delay(500);
-        }
-    }
-    if (!sdOk)
-    {
-        Serial.printf("ERROR: File system mount failed! card type %d, free heap %u\n", SD.cardType(), ESP.getFreeHeap());
         while (true)
         {
             /* no need to continue */
         }
     }
 
-    loadMjpegFilesList(); // Load the list of mjpeg to play from the SD card
-    if (mjpegCount == 0)
+    if (!storageBegin())
     {
-        Serial.printf("No .mjpeg files in %s\n", MJPEG_FOLDER);
-        gfx->setTextColor(RGB565_WHITE);
-        gfx->setTextSize(2);
-        gfx->setCursor(10, 10);
-        gfx->printf("No .mjpeg files in %s", MJPEG_FOLDER);
+        displayMessage("SD card not found", "Insert a FAT32 microSD card (<=32GB partition) and reset.");
         while (true)
         {
             delay(1000);
         }
     }
 
-    // Set the boot button to skip the current mjpeg playing and go to the next
+    touchCalibrate(false); // runs once, then loads the saved calibration
+    lvglBegin();
+    menuBegin();
+    audioBegin();
+
+    // BOOT button: next photo / video / track
     pinMode(BOOT_PIN, INPUT);
     attachInterrupt(digitalPinToInterrupt(BOOT_PIN), // fast ISR
                     onButtonPress, FALLING);         // press == LOW
+
+    // Boot into the slideshow, or video when there are no photos, else the menu
+    if (countMedia(PHOTO_FOLDER, isPhoto))
+        appRequestState(STATE_SLIDESHOW);
+    else if (countMedia(MJPEG_FOLDER, isVideo))
+        appRequestState(STATE_VIDEO);
+    else
+        appRequestState(STATE_MENU);
+    LOGF("Setup done, free heap %lu\n", ESP.getFreeHeap());
 }
 
 void loop()
 {
-    playSelectedMjpeg(currentMjpegIndex);
-    currentMjpegIndex++;
-    if (currentMjpegIndex >= mjpegCount)
+    if (statePending)
     {
-        currentMjpegIndex = 0;
+        statePending = false;
+        enterState(pendingState, pendingPath);
+    }
+    switch (state)
+    {
+    case STATE_MENU:
+    case STATE_AUDIO_PLAYER:
+        lvglTask();
+        if (state == STATE_MENU && digitalRead(BOOT_PIN) == LOW)
+        {
+            if (!bootHeldSince)
+                bootHeldSince = millis();
+            else if (millis() - bootHeldSince > 3000)
+            {
+                lvglSuspend();
+                touchCalibrate(true);
+                bootHeldSince = 0;
+                showMenu("Touch calibrated");
+            }
+        }
+        else
+        {
+            bootHeldSince = 0;
+        }
+        delay(5);
+        break;
+    case STATE_SLIDESHOW:
+    case STATE_PHOTO_VIEW:
+        if (slideshowLoop())
+            appRequestState(STATE_MENU);
+        delay(2);
+        break;
+    case STATE_VIDEO:
+        playSelectedMjpeg(currentMjpegIndex);
+        if (exitRequested)
+        {
+            appRequestState(STATE_MENU);
+            break;
+        }
+        currentMjpegIndex++;
+        if (currentMjpegIndex >= (int)mjpegFiles.size())
+        {
+            currentMjpegIndex = 0;
+        }
+        break;
+    case STATE_RECEIVE:
+        if (receiveLoop())
+            finishReceive();
+        break;
     }
 }
 
@@ -278,7 +330,7 @@ void loop()
 void playSelectedMjpeg(int mjpegIndex)
 {
     // Build the full path for the selected mjpeg
-    String fullPath = String(MJPEG_FOLDER) + "/" + mjpegFileList[mjpegIndex];
+    String fullPath = String(MJPEG_FOLDER) + "/" + mjpegFiles[mjpegIndex];
     char mjpegFilename[128];
     fullPath.toCharArray(mjpegFilename, sizeof(mjpegFilename));
 
@@ -401,11 +453,10 @@ void mjpegPlayFromSDCard(char *mjpegFilename)
         );
 
         // Consumer loop on Core 1 (APP_CPU)
-        unsigned long lastTouchPollTime = 0;
         unsigned long frameStart, waitStart, waitEnd, decodeStart, decodeEnd, touchPollStart, touchPollEnd;
         int readIndex = 0;
 
-        while (!skipRequested) // exits on the reader's zero-length end-of-file frame
+        while (!skipRequested && !exitRequested) // exits on the reader's zero-length end-of-file frame
         {
             frameStart = micros();
 
@@ -430,31 +481,11 @@ void mjpegPlayFromSDCard(char *mjpegFilename)
 
             // === Touch Polling (throttled) ===
             touchPollStart = micros();
-            unsigned long now = millis();
-#ifdef HAS_TOUCH
-            if (now - lastTouchPollTime >= TOUCH_POLL_INTERVAL_MS)
+            int16_t tx, ty;
+            if (touchTapped(tx, ty)) // throttled to TOUCH_POLL_MS, IRQ pin checked first
             {
-                lastTouchPollTime = now;
-                if (touch.Pressed() && (now - lastTouchSkip >= TOUCH_SKIP_DEBOUNCE_MS))
-                {
-                    int16_t tx = touch.X();
-                    int16_t ty = touch.Y();
-
-                    // Define center touch zone (50% of screen, centered)
-                    int16_t zoneLeft   = gfx->width() / 4;
-                    int16_t zoneRight  = gfx->width() * 3 / 4;
-                    int16_t zoneTop    = gfx->height() / 4;
-                    int16_t zoneBottom = gfx->height() * 3 / 4;
-                    // Only skip if touch is within the center zone, to avoid accidental
-                    // skips when pressing the edges of the screen or case.
-                    if (tx >= zoneLeft && tx <= zoneRight && ty >= zoneTop && ty <= zoneBottom)
-                    {
-                        lastTouchSkip = now;
-                        skipRequested = true;
-                    }
-                }
+                exitRequested = true; // tap anywhere: back to the menu
             }
-#endif
             touchPollEnd = micros();
             stats.totalTouchPoll += (touchPollEnd - touchPollStart);
 
@@ -528,63 +559,5 @@ void mjpegPlayFromSDCard(char *mjpegFilename)
 
         // Print detailed statistics
         printVideoStats(mjpegFilename);
-    }
-}
-
-// Read the mjpeg file list in the mjpeg folder of the SD card
-void loadMjpegFilesList()
-{
-    File mjpegDir = SD.open(MJPEG_FOLDER);
-    if (!mjpegDir)
-    {
-        Serial.printf("Failed to open %s folder\n", MJPEG_FOLDER);
-        while (true)
-        {
-            /* code */
-        }
-    }
-    mjpegCount = 0;
-    while (true)
-    {
-        File file = mjpegDir.openNextFile();
-        if (!file)
-            break;
-        if (!file.isDirectory())
-        {
-            String name = file.name();
-            if (name.endsWith(".mjpeg"))
-            {
-                mjpegFileList[mjpegCount] = name;
-                mjpegFileSizes[mjpegCount] = file.size(); // Save file size (in bytes)
-                mjpegCount++;
-                if (mjpegCount >= MAX_FILES)
-                    break;
-            }
-        }
-        file.close();
-    }
-    mjpegDir.close();
-    Serial.printf("%d mjpeg files read\n", mjpegCount);
-    // Optionally, print out each file's size for debugging:
-    for (int i = 0; i < mjpegCount; i++)
-    {
-        Serial.printf("File %d: %s, Size: %lu bytes (%s)\n", i, mjpegFileList[i].c_str(), mjpegFileSizes[i],formatBytes(mjpegFileSizes[i]).c_str());
-    }
-}
-
-// Function helper display sizes on the serial monitor
-String formatBytes(size_t bytes)
-{
-    if (bytes < 1024)
-    {
-        return String(bytes) + " B";
-    }
-    else if (bytes < (1024 * 1024))
-    {
-        return String(bytes / 1024.0, 2) + " KB";
-    }
-    else
-    {
-        return String(bytes / 1024.0 / 1024.0, 2) + " MB";
     }
 }

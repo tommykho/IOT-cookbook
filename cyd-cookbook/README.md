@@ -4,7 +4,7 @@ Projects, firmware backups and notes for "Cheap Yellow Display" style ESP32 touc
 
 | Folder | What |
 |---|---|
-| [cyd-video-player](cyd-video-player/) | MJPEG video player from SD card (ESP32-3248S035, ESP32-2432S028) |
+| [cyd-video-player](cyd-video-player/) | MJPEG video, JPG/GIF slideshow and MP3/WAV player with Wi-Fi upload from a phone (ESP32-3248S035, ESP32-2432S028) |
 | [splash](splash/) | Animated GIF boot splash with fade in/out |
 | [devices/ESP32-3248S035](devices/ESP32-3248S035/) | Factory firmware backup, `videoplayer.bin`, `restore.cmd` |
 | [devices/JC3248W535C](devices/JC3248W535C/) | Factory firmware backup (Guition 3.5" ESP32-S3), `restore.cmd` |
